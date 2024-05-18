@@ -1,4 +1,5 @@
-from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QPushButton, QFileDialog, QSlider, QHBoxLayout, QVBoxLayout
+from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QPushButton, QFileDialog, QSlider, QHBoxLayout, QVBoxLayout, \
+    QTabWidget
 from PyQt5.QtGui import QPixmap, QImage
 from PyQt5.QtCore import Qt
 from PyQt5 import QtGui
@@ -8,6 +9,8 @@ from data_extraction import DataExtraction
 from data_exporter import DataExporter
 import cv2
 import numpy as np
+
+
 class MainWindow(QWidget):
     def __init__(self):
         super().__init__()
@@ -22,37 +25,35 @@ class MainWindow(QWidget):
         self.setWindowTitle('Engauge Digitizer')
         self.setGeometry(100, 100, 800, 600)
 
-        self.image_label = QLabel(self)
+        # Create tab widget
+        self.tabs = QTabWidget()
+        self.tab1 = QWidget()
+        self.tab2 = QWidget()
+        self.tab3 = QWidget()
+        self.tabs.resize(800, 600)
+
+        # Add tabs
+        self.tabs.addTab(self.tab1, "Load & Edit")
+        self.tabs.addTab(self.tab2, "Calibration")
+        self.tabs.addTab(self.tab3, "Data Extraction")
+
+        # Tab 1: Load & Edit
+        self.image_label = QLabel(self.tab1)
         self.image_label.setGeometry(50, 50, 700, 500)
 
-        self.load_button = QPushButton('Load Image', self)
+        self.load_button = QPushButton('Load Image', self.tab1)
         self.load_button.clicked.connect(self.open_image)
         self.load_button.move(50, 560)
 
-        self.calibrate_button = QPushButton('Calibrate Axes', self)
-        self.calibrate_button.clicked.connect(self.calibrate_axes) # Make sure this line appears ONLY ONCE
-        self.calibrate_button.move(200, 560)
-
-        self.extract_button = QPushButton('Extract Data', self)
-        self.extract_button.clicked.connect(self.extract_data)
-        self.extract_button.move(350, 560)
-
-        self.interpolate_button = QPushButton('Interpolate Data', self)
-        self.interpolate_button.clicked.connect(self.interpolate_data)
-        self.interpolate_button.move(500, 560)
-
-        self.export_button = QPushButton('Export Data', self)
-        self.export_button.clicked.connect(self.export_data)
-        self.export_button.move(650, 560)
-
-        self.brightness_label = QLabel("Brightness:", self)
-        self.brightness_slider = QSlider(Qt.Horizontal, self)
+        # Brightness and Contrast Sliders
+        self.brightness_label = QLabel("Brightness:", self.tab1)
+        self.brightness_slider = QSlider(Qt.Horizontal, self.tab1)
         self.brightness_slider.setRange(-255, 255)
         self.brightness_slider.setValue(0)
         self.brightness_slider.valueChanged.connect(self.adjust_brightness)
 
-        self.contrast_label = QLabel("Contrast:", self)
-        self.contrast_slider = QSlider(Qt.Horizontal, self)
+        self.contrast_label = QLabel("Contrast:", self.tab1)
+        self.contrast_slider = QSlider(Qt.Horizontal, self.tab1)
         self.contrast_slider.setRange(-255, 255)
         self.contrast_slider.setValue(0)
         self.contrast_slider.valueChanged.connect(self.adjust_contrast)
@@ -65,18 +66,36 @@ class MainWindow(QWidget):
         slider_layout.addWidget(self.contrast_slider)
 
         # Adjust margins and spacing for slider_layout
-        slider_layout.setContentsMargins(10, 10, 10, 10)  # Set margins (left, top, right, bottom)
-        slider_layout.setSpacing(10)  # Set spacing between items
+        slider_layout.setContentsMargins(10, 10, 10, 10)
+        slider_layout.setSpacing(10)
 
-        # Main layout
+        # Main layout for Tab 1
+        tab1_layout = QVBoxLayout(self.tab1)
+        tab1_layout.addWidget(self.image_label)
+        tab1_layout.addWidget(self.load_button)
+        tab1_layout.addLayout(slider_layout)
+
+        # Tab 2: Calibration
+        self.calibrate_button = QPushButton('Calibrate Axes', self.tab2)
+        self.calibrate_button.clicked.connect(self.calibrate_axes)
+        self.calibrate_button.move(50, 50)
+
+        # Tab 3: Data Extraction
+        self.extract_button = QPushButton('Extract Data', self.tab3)
+        self.extract_button.clicked.connect(self.extract_data)
+        self.extract_button.move(50, 50)
+
+        self.interpolate_button = QPushButton('Interpolate Data', self.tab3)
+        self.interpolate_button.clicked.connect(self.interpolate_data)
+        self.interpolate_button.move(50, 100)
+
+        self.export_button = QPushButton('Export Data', self.tab3)
+        self.export_button.clicked.connect(self.export_data)
+        self.export_button.move(50, 150)
+
+        # Set the layout of the main window to the tab widget
         main_layout = QVBoxLayout(self)
-
-        # Adjust margins and spacing for main_layout
-        main_layout.setContentsMargins(10, 10, 10, 10)  # Set margins
-        main_layout.setSpacing(10)  # Set spacing between items
-
-        # ... (add other GUI elements to main_layout)
-        main_layout.addLayout(slider_layout)
+        main_layout.addWidget(self.tabs)
     def open_image(self):
         options = QFileDialog.Options()
         filepath, _ = QFileDialog.getOpenFileName(self, "Select Image", "",

@@ -11,7 +11,7 @@ class DataExporter:
         try:
             with open(filepath, 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile)
-                writer.writerow(["X", "Y"])  # Header row
+                writer.writerow(["X", "Y"])
                 for x, y in data_points:
                     writer.writerow([x, y])
             print(f"Data exported successfully to {filepath}")

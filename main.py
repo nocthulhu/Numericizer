@@ -1,6 +1,7 @@
-from PyQt5.QtWidgets import QApplication, QLabel, QWidget, QPushButton, QFileDialog, QSlider, QHBoxLayout, QVBoxLayout, \
-    QTabWidget, QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QPushButton, QFileDialog, QSlider, QHBoxLayout,\
+    QVBoxLayout, \
+    QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QAction, QMenu, QMenuBar
+from PyQt5.QtGui import QPixmap, QImage, QCursor
 from PyQt5.QtCore import Qt, QPointF
 from PyQt5 import QtGui
 from image_processor import ImageProcessor
@@ -18,9 +19,9 @@ class ImageView(QGraphicsView):
         self.setScene(self.scene)
         self.pixmap_item = None
         self.zoom_factor = 1
+        self.main_window = parent
 
     def set_image(self, image):
-        """Sets the image for the view."""
         height, width, channel = image.shape
         bytes_per_line = 3 * width
         q_image = QImage(image.data, width, height, bytes_per_line, QImage.Format_RGB888).rgbSwapped()
@@ -33,7 +34,6 @@ class ImageView(QGraphicsView):
             self.pixmap_item.setPixmap(self.pixmap)
 
     def wheelEvent(self, event):
-        """Zoom with mouse wheel."""
         if self.pixmap_item:
             degrees = event.angleDelta().y() / 8
             steps = degrees / 15
@@ -41,20 +41,14 @@ class ImageView(QGraphicsView):
             self.scale(1.1 ** steps, 1.1 ** steps)
 
     def mousePressEvent(self, event):
-        """Start panning."""
         if event.button() == Qt.LeftButton:
-            self.setDragMode(QGraphicsView.ScrollHandDrag)
-            self.start_pos = event.pos()
-            super().mousePressEvent(event)
-
-    def mouseReleaseEvent(self, event):
-        """End panning."""
-        if event.button() == Qt.LeftButton:
-            self.setDragMode(QGraphicsView.NoDrag)
-            super().mouseReleaseEvent(event)
+            if self.main_window.calibration_mode:  # use main_window referance
+                self.main_window.calibration.add_calibration_point(self.mapToScene(event.pos()))
+            elif self.main_window.extraction_mode:  # use main_window referance
+                self.main_window.data_extraction.add_data_point(self.mapToScene(event.pos()))
 
 
-class MainWindow(QWidget):
+class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
         self.image_processor = ImageProcessor()
@@ -63,57 +57,58 @@ class MainWindow(QWidget):
         self.data_exporter = DataExporter()
         self.initUI()
 
+        self.calibration_mode = False
+        self.extraction_mode = False
+
+        self.original_image = None
+
     def initUI(self):
         self.setWindowTitle('Engauge Digitizer')
         self.setGeometry(100, 100, 800, 600)
 
-        # Create tab widget
-        self.tabs = QTabWidget()
-        self.tab1 = QWidget()
-        self.tab2 = QWidget()
-        self.tab3 = QWidget()
-        self.tabs.resize(800, 600)
+        # Image View
+        self.image_view = ImageView(self)
+        self.setCentralWidget(self.image_view)
 
-        # Add tabs
-        self.tabs.addTab(self.tab1, "Load & Edit")
-        self.tabs.addTab(self.tab2, "Calibration")
-        self.tabs.addTab(self.tab3, "Data Extraction")
+        # Menu Bar
+        menubar = self.menuBar()
+        fileMenu = menubar.addMenu('&File')
+        openAction = QAction('&Open Image', self)
+        openAction.triggered.connect(self.open_image)
+        fileMenu.addAction(openAction)
 
-        # Tab 1: Load & Edit
-        self.image_view = ImageView(self.tab1)
-        self.image_view.setGeometry(50, 50, 700, 500)
+        toolsMenu = menubar.addMenu('&Tools')
+        calibrationAction = QAction('&Calibrate Axes', self)
+        calibrationAction.triggered.connect(self.toggle_calibration_mode)
+        toolsMenu.addAction(calibrationAction)
 
-        self.load_button = QPushButton('Load Image', self.tab1)
-        self.load_button.clicked.connect(self.open_image)
-        self.load_button.move(50, 560)
+        extractionAction = QAction('&Extract Data', self)
+        extractionAction.triggered.connect(self.toggle_extraction_mode)
+        toolsMenu.addAction(extractionAction)
 
-        # Tab 2: Calibration
-        self.calibrate_button = QPushButton('Calibrate Axes', self.tab2)
-        self.calibrate_button.clicked.connect(self.calibrate_axes)
-        self.calibrate_button.move(50, 50)
+        exportAction = QAction('&Export Data', self)
+        exportAction.triggered.connect(self.export_data)
+        toolsMenu.addAction(exportAction)
 
-        # Tab 3: Data Extraction
-        self.extract_button = QPushButton('Extract Data', self.tab3)
-        self.extract_button.clicked.connect(self.extract_data)
-        self.extract_button.move(50, 50)
-
-        self.interpolate_button = QPushButton('Interpolate Data', self.tab3)
-        self.interpolate_button.clicked.connect(self.interpolate_data)
-        self.interpolate_button.move(50, 100)
-
-        self.export_button = QPushButton('Export Data', self.tab3)
-        self.export_button.clicked.connect(self.export_data)
-        self.export_button.move(50, 150)
+        interpolateAction = QAction('&Interpolate Data', self)
+        interpolateAction.triggered.connect(self.interpolate_data)
+        toolsMenu.addAction(interpolateAction)
+        # Toolbar
+        toolbar = self.addToolBar('Tools')
+        toolbar.addAction(calibrationAction)
+        toolbar.addAction(extractionAction)
+        toolbar.addAction(exportAction)
+        toolbar.addAction(interpolateAction)
 
         # Brightness and Contrast Sliders
-        self.brightness_label = QLabel("Brightness:", self.tab1)
-        self.brightness_slider = QSlider(Qt.Horizontal, self.tab1)
+        self.brightness_label = QLabel("Brightness:", self)
+        self.brightness_slider = QSlider(Qt.Horizontal, self)
         self.brightness_slider.setRange(-255, 255)
         self.brightness_slider.setValue(0)
         self.brightness_slider.valueChanged.connect(self.adjust_brightness)
 
-        self.contrast_label = QLabel("Contrast:", self.tab1)
-        self.contrast_slider = QSlider(Qt.Horizontal, self.tab1)
+        self.contrast_label = QLabel("Contrast:", self)
+        self.contrast_slider = QSlider(Qt.Horizontal, self)
         self.contrast_slider.setRange(-255, 255)
         self.contrast_slider.setValue(0)
         self.contrast_slider.valueChanged.connect(self.adjust_contrast)
@@ -125,19 +120,14 @@ class MainWindow(QWidget):
         slider_layout.addWidget(self.contrast_label)
         slider_layout.addWidget(self.contrast_slider)
 
-        # Adjust margins and spacing for slider_layout
-        slider_layout.setContentsMargins(10, 10, 10, 10)
-        slider_layout.setSpacing(10)
+        # Main layout
+        main_layout = QVBoxLayout()
+        main_layout.addLayout(slider_layout)
+        main_layout.addWidget(self.image_view)
 
-        # Main layout for Tab 1
-        tab1_layout = QVBoxLayout(self.tab1)
-        tab1_layout.addWidget(self.image_view)
-        tab1_layout.addWidget(self.load_button)
-        tab1_layout.addLayout(slider_layout)
-
-        # Set the layout of the main window to the tab widget
-        main_layout = QVBoxLayout(self)
-        main_layout.addWidget(self.tabs)
+        central_widget = QWidget()
+        central_widget.setLayout(main_layout)
+        self.setCentralWidget(central_widget)
 
     def open_image(self):
         options = QFileDialog.Options()
@@ -154,17 +144,13 @@ class MainWindow(QWidget):
     def adjust_brightness(self, value):
         if self.original_image is not None:
             self.apply_brightness_contrast(value, self.contrast_slider.value())
-        else:
-            print("Load an image first.")
 
     def adjust_contrast(self, value):
         if self.original_image is not None:
             self.apply_brightness_contrast(self.brightness_slider.value(), value)
-        else:
-            print("Load an image first.")
 
     def apply_brightness_contrast(self, brightness, contrast):
-        """Applies both brightness and contrast adjustments to the image."""
+        """Applies brightness and contrast adjustments to the image."""
         img = self.original_image.copy()
         hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
         h, s, v = cv2.split(hsv)
@@ -185,28 +171,33 @@ class MainWindow(QWidget):
         if self.image_processor.image is not None:
             self.image_view.set_image(self.image_processor.image)
 
-    def calibrate_axes(self):
-        if self.image_processor.image is not None:
-            self.calibration.calibrate_axes()
+    def toggle_calibration_mode(self):
+        self.calibration_mode = not self.calibration_mode
+        self.extraction_mode = False
+        if self.calibration_mode:
+            self.setCursor(QCursor(Qt.CrossCursor))
         else:
-            print("Load an image first.")
+            self.setCursor(QCursor(Qt.ArrowCursor))
 
-    def extract_data(self):
-        if self.image_processor.image is not None:
-            self.data_extraction.extract_data()
+    def toggle_extraction_mode(self):
+        self.extraction_mode = not self.extraction_mode
+        self.calibration_mode = False
+        if self.extraction_mode:
+            self.setCursor(QCursor(Qt.CrossCursor))
         else:
-            print("Load an image first.")
+            self.setCursor(QCursor(Qt.ArrowCursor))
+
     def export_data(self):
         if self.data_extraction.data_points:
             options = QFileDialog.Options()
             filepath, _ = QFileDialog.getSaveFileName(self, "Save Data", "",
-                                                    "CSV Files (*.csv);;All Files (*)", options=options)
+                                                      "CSV Files (*.csv);;All Files (*)", options=options)
             if filepath:
                 self.data_exporter.export_to_csv(self.data_extraction.data_points, filepath)
-        else:
-            print("No data to export. Extract data points first.")
+
     def interpolate_data(self):
         self.data_extraction.interpolate_data()
+
 
 if __name__ == '__main__':
     app = QApplication([])

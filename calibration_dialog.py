@@ -1,5 +1,6 @@
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QLabel, QLineEdit, QPushButton
 
+
 class CalibrationDialog(QDialog):
     def __init__(self, parent=None):
         super().__init__(parent)

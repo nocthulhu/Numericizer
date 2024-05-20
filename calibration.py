@@ -1,7 +1,7 @@
 import cv2
-import numpy as np
-from calibration_dialog import CalibrationDialog
-from PyQt5.QtWidgets import QDialog
+from PyQt5.QtWidgets import QInputDialog
+from PyQt5.QtCore import QPointF
+
 
 class Calibration:
     """Axis calibration and scaling."""
@@ -12,37 +12,30 @@ class Calibration:
         self.real_distance = None
         self.calibration_done = False
 
-    def get_mouse_points(self, image, window_name, point_count=2):
-        points = []
-
-        def mouse_callback(event, x, y, flags, param):
-            if event == cv2.EVENT_LBUTTONDOWN:
-                if len(points) < point_count or point_count == -1:
-                    points.append((x, y))
-                    cv2.circle(image, (x, y), 5, (255, 0, 0), -1)
-                    cv2.imshow(window_name, image)
-                    if len(points) == point_count:
-                        cv2.destroyAllWindows()
-
-        cv2.namedWindow(window_name)
-        cv2.setMouseCallback(window_name, mouse_callback)
-        cv2.imshow(window_name, image)
-        cv2.waitKey(0)
-        return points
-
-    def calibrate_axes(self):
-        """Asks the user to select two points for axis calibration."""
-        if self.main_window.image_processor.image is not None:
-            self.calibration_points = self.get_mouse_points(self.main_window.image_processor.image.copy(),
-                                                            "Calibration", 2)
+    def add_calibration_point(self, point):
+        """Adds a calibration point to the list."""
+        if len(self.calibration_points) < 2:
+            self.calibration_points.append(QPointF(point.x(), point.y()))
+            self.draw_calibration_points()
             if len(self.calibration_points) == 2:
-                dialog = CalibrationDialog()
-                if dialog.exec_() == QDialog.Accepted:
-                    self.real_distance = dialog.real_distance
-                    self.calibration_done = True
-                    self.main_window.update_image_view()
-        else:
-            print("Load an image first.")
+                self.get_real_distance()
+
+    def draw_calibration_points(self):
+        """Draws calibration points on the image view."""
+        if self.main_window.image_processor.image is not None:
+            image_copy = self.main_window.image_processor.image.copy()
+            for point in self.calibration_points:
+                x, y = point.x(), point.y()
+                cv2.circle(image_copy, (int(x), int(y)), 5, (0, 0, 255), -1)
+            self.main_window.image_processor.image = image_copy
+            self.main_window.update_image_view()
+
+    def get_real_distance(self):
+        """Gets the real distance between the calibration points from the user."""
+        distance, ok = QInputDialog.getDouble(self.main_window, "Enter Real Distance", "Real distance:", 1.0)
+        if ok:
+            self.real_distance = distance
+            self.calibration_done = True
 
     def reset_calibration(self):
         """Resets calibration parameters."""

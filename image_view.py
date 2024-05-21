@@ -5,8 +5,8 @@ from PyQt5 import QtGui
 
 class ImageView(QGraphicsView):
     """
-    Custom QGraphicsView for displaying and interacting with the image.
-    Handles zooming, panning, and drawing calibration and data points.
+    Custom QGraphicsView
+    zooming, panning, and drawing calibration and data points.
     """
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -62,13 +62,16 @@ class ImageView(QGraphicsView):
             self.calibration_points_graphics.append(point_graphic)
 
     def draw_data_points(self, data_points):
-        """Draws data points on the image view."""
+        """
+        Draws data points on the image view using original image points.
+        """
         for point_graphic in self.data_points_graphics:
             self.scene.removeItem(point_graphic)
         self.data_points_graphics = []
 
         for point in data_points:
             x, y = point.x(), point.y()
-            point_graphic = self.scene.addEllipse(x - 3, y - 3, 6, 6, QtGui.QPen(Qt.blue),
-                                                  QtGui.QBrush(Qt.blue))
+            point_graphic = self.scene.addEllipse(x - 3, y - 3, 6, 6,
+                                                  QtGui.QPen(Qt.blue), QtGui.QBrush(Qt.blue))
             self.data_points_graphics.append(point_graphic)
+

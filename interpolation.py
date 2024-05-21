@@ -3,18 +3,17 @@ import numpy as np
 
 class Interpolation:
     """
-    Handles linear interpolation between extracted data points.
+    Handles linear interpolation between extracted data points
+    using image coordinates.
     """
     def __init__(self, main_window):
         self.main_window = main_window
-        self.interpolated_points = []
+        self.interpolated_points = []  # Stores QPointF of interpolated image points
 
     def interpolate_data(self, data_points):
-        """Performs linear interpolation on the given data points and draws the interpolated points."""
+        """Performs linear interpolation on image coordinates."""
         if len(data_points) > 1:
-            # Sort points by x-coordinate before interpolation
             sorted_points = sorted(data_points, key=lambda point: point.x())
-
             x, y = zip(*[(p.x(), p.y()) for p in sorted_points])
             x_interp = np.linspace(x[0], x[-1], num=100)
             y_interp = np.interp(x_interp, x, y)

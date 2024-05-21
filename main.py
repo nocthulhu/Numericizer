@@ -13,8 +13,7 @@ import numpy as np
 
 class MainWindow(QMainWindow):
     """
-    Main application window for Engauge Digitizer.
-    Handles user interface, image processing, calibration, data extraction, interpolation, and data export.
+    Handles user interface, image processing, calibration, data extraction, interpolation, data expor etc.
     """
     def __init__(self):
         super().__init__()
@@ -173,26 +172,34 @@ class MainWindow(QMainWindow):
             self.setCursor(QCursor(Qt.ArrowCursor))
 
     def toggle_interpolation_mode(self):
-        """Toggles interpolation mode on or off and performs interpolation if activated."""
+        """
+        Toggles interpolation mode.
+        Calculates real-world coordinates for interpolated points if calibration is done.
+        """
         self.interpolation_mode = not self.interpolation_mode
         self.calibration_mode = False
         self.extraction_mode = False
+
         if self.interpolation_mode:
             self.interpolation.interpolate_data(self.extraction.data_points)
+            if self.calibration.calibration_done:
+                self.interpolation.interpolated_real_coordinates = [
+                    self.calibration.transform_point(p) for p in self.interpolation.interpolated_points
+                ]
         else:
             self.setCursor(QCursor(Qt.ArrowCursor))
 
     def export_data(self):
         """Exports data points to a CSV file using a file dialog."""
-        if self.extraction.data_points:
+        if self.extraction.real_coordinates:
             options = QFileDialog.Options()
             filepath, _ = QFileDialog.getSaveFileName(self, "Save Data", "",
                                                       "CSV Files (*.csv);;All Files (*)", options=options)
             if filepath:
                 if self.interpolation_mode:
-                    self.data_exporter.export_to_csv(self.interpolation.interpolated_points, filepath)
+                    self.data_exporter.export_to_csv(self.interpolation.interpolated_real_coordinates, filepath)
                 else:
-                    self.data_exporter.export_to_csv(self.extraction.data_points, filepath)
+                    self.data_exporter.export_to_csv(self.extraction.real_coordinates, filepath)
 
 if __name__ == '__main__':
     app = QApplication([])

@@ -1,68 +1,38 @@
-from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QPushButton, QFileDialog, QSlider, QHBoxLayout,\
-    QVBoxLayout, \
-    QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QAction, QMenu, QMenuBar
-from PyQt5.QtGui import QPixmap, QImage, QCursor
-from PyQt5.QtCore import Qt, QPointF
-from PyQt5 import QtGui
+from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QPushButton, QFileDialog, QSlider, QHBoxLayout, \
+    QVBoxLayout, QAction, QMenu, QMenuBar
+from PyQt5.QtGui import QCursor
+from PyQt5.QtCore import Qt
+from image_view import ImageView
 from image_processor import ImageProcessor
 from calibration import Calibration
-from data_extraction import DataExtraction
+from data_extraction import Extraction
+from interpolation import Interpolation
 from data_exporter import DataExporter
 import cv2
 import numpy as np
 
-
-class ImageView(QGraphicsView):
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.scene = QGraphicsScene()
-        self.setScene(self.scene)
-        self.pixmap_item = None
-        self.zoom_factor = 1
-        self.main_window = parent
-
-    def set_image(self, image):
-        height, width, channel = image.shape
-        bytes_per_line = 3 * width
-        q_image = QImage(image.data, width, height, bytes_per_line, QImage.Format_RGB888).rgbSwapped()
-        self.pixmap = QPixmap.fromImage(q_image)
-        if self.pixmap_item is None:
-            self.pixmap_item = QGraphicsPixmapItem(self.pixmap)
-            self.scene.addItem(self.pixmap_item)
-            self.fitInView(self.pixmap_item, Qt.KeepAspectRatio)
-        else:
-            self.pixmap_item.setPixmap(self.pixmap)
-
-    def wheelEvent(self, event):
-        if self.pixmap_item:
-            degrees = event.angleDelta().y() / 8
-            steps = degrees / 15
-            self.zoom_factor *= 1.1 ** steps
-            self.scale(1.1 ** steps, 1.1 ** steps)
-
-    def mousePressEvent(self, event):
-        if event.button() == Qt.LeftButton:
-            if self.main_window.calibration_mode:  # use main_window referance
-                self.main_window.calibration.add_calibration_point(self.mapToScene(event.pos()))
-            elif self.main_window.extraction_mode:  # use main_window referance
-                self.main_window.data_extraction.add_data_point(self.mapToScene(event.pos()))
-
-
 class MainWindow(QMainWindow):
+    """
+    Main application window for Engauge Digitizer.
+    Handles user interface, image processing, calibration, data extraction, interpolation, and data export.
+    """
     def __init__(self):
         super().__init__()
         self.image_processor = ImageProcessor()
         self.calibration = Calibration(self)
-        self.data_extraction = DataExtraction(self, self.calibration)
+        self.extraction = Extraction(self)
+        self.interpolation = Interpolation(self)
         self.data_exporter = DataExporter()
         self.initUI()
 
         self.calibration_mode = False
         self.extraction_mode = False
+        self.interpolation_mode = False
 
         self.original_image = None
 
     def initUI(self):
+        """Initializes the user interface, including menus, toolbar, and sliders."""
         self.setWindowTitle('Engauge Digitizer')
         self.setGeometry(100, 100, 800, 600)
 
@@ -86,19 +56,20 @@ class MainWindow(QMainWindow):
         extractionAction.triggered.connect(self.toggle_extraction_mode)
         toolsMenu.addAction(extractionAction)
 
+        interpolationAction = QAction('&Interpolate Data', self)
+        interpolationAction.triggered.connect(self.toggle_interpolation_mode)
+        toolsMenu.addAction(interpolationAction)
+
         exportAction = QAction('&Export Data', self)
         exportAction.triggered.connect(self.export_data)
         toolsMenu.addAction(exportAction)
 
-        interpolateAction = QAction('&Interpolate Data', self)
-        interpolateAction.triggered.connect(self.interpolate_data)
-        toolsMenu.addAction(interpolateAction)
         # Toolbar
         toolbar = self.addToolBar('Tools')
         toolbar.addAction(calibrationAction)
         toolbar.addAction(extractionAction)
+        toolbar.addAction(interpolationAction)
         toolbar.addAction(exportAction)
-        toolbar.addAction(interpolateAction)
 
         # Brightness and Contrast Sliders
         self.brightness_label = QLabel("Brightness:", self)
@@ -130,6 +101,7 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
 
     def open_image(self):
+        """Opens an image file using a file dialog."""
         options = QFileDialog.Options()
         filepath, _ = QFileDialog.getOpenFileName(self, "Select Image", "",
                                                   "Image Files (*.jpg *.jpeg *.png);;All Files (*)", options=options)
@@ -142,10 +114,12 @@ class MainWindow(QMainWindow):
             self.update_image_view()
 
     def adjust_brightness(self, value):
+        """Adjusts the brightness of the image."""
         if self.original_image is not None:
             self.apply_brightness_contrast(value, self.contrast_slider.value())
 
     def adjust_contrast(self, value):
+        """Adjusts the contrast of the image."""
         if self.original_image is not None:
             self.apply_brightness_contrast(self.brightness_slider.value(), value)
 
@@ -167,37 +141,58 @@ class MainWindow(QMainWindow):
         self.update_image_view()
 
     def update_image_view(self):
-        """Updates the image view with the processed image."""
+        """Updates the image view with the processed image and any drawn points."""
         if self.image_processor.image is not None:
             self.image_view.set_image(self.image_processor.image)
 
+            if self.calibration_mode:
+                self.image_view.draw_calibration_points(self.calibration.calibration_points)
+            elif self.extraction_mode:
+                self.image_view.draw_data_points(self.extraction.data_points)
+            elif self.interpolation_mode:
+                self.image_view.draw_data_points(self.interpolation.interpolated_points)
+
     def toggle_calibration_mode(self):
+        """Toggles calibration mode on or off."""
         self.calibration_mode = not self.calibration_mode
         self.extraction_mode = False
+        self.interpolation_mode = False
         if self.calibration_mode:
             self.setCursor(QCursor(Qt.CrossCursor))
         else:
             self.setCursor(QCursor(Qt.ArrowCursor))
 
     def toggle_extraction_mode(self):
+        """Toggles data extraction mode on or off."""
         self.extraction_mode = not self.extraction_mode
         self.calibration_mode = False
+        self.interpolation_mode = False
         if self.extraction_mode:
             self.setCursor(QCursor(Qt.CrossCursor))
         else:
             self.setCursor(QCursor(Qt.ArrowCursor))
 
+    def toggle_interpolation_mode(self):
+        """Toggles interpolation mode on or off and performs interpolation if activated."""
+        self.interpolation_mode = not self.interpolation_mode
+        self.calibration_mode = False
+        self.extraction_mode = False
+        if self.interpolation_mode:
+            self.interpolation.interpolate_data(self.extraction.data_points)
+        else:
+            self.setCursor(QCursor(Qt.ArrowCursor))
+
     def export_data(self):
-        if self.data_extraction.data_points:
+        """Exports data points to a CSV file using a file dialog."""
+        if self.extraction.data_points:
             options = QFileDialog.Options()
             filepath, _ = QFileDialog.getSaveFileName(self, "Save Data", "",
                                                       "CSV Files (*.csv);;All Files (*)", options=options)
             if filepath:
-                self.data_exporter.export_to_csv(self.data_extraction.data_points, filepath)
-
-    def interpolate_data(self):
-        self.data_extraction.interpolate_data()
-
+                if self.interpolation_mode:
+                    self.data_exporter.export_to_csv(self.interpolation.interpolated_points, filepath)
+                else:
+                    self.data_exporter.export_to_csv(self.extraction.data_points, filepath)
 
 if __name__ == '__main__':
     app = QApplication([])

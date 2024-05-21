@@ -1,15 +1,15 @@
 import csv
 
-
 class DataExporter:
-    """Exports extracted data points to a CSV file."""
-
+    """
+    Handles exporting extracted data points to a CSV file.
+    """
     def __init__(self):
         pass
 
     @staticmethod
     def export_to_csv(data_points, filepath):
-        """Exports data points to a CSV file."""
+        """Exports data points to a CSV file at the given filepath."""
         try:
             with open(filepath, 'w', newline='') as csvfile:
                 writer = csv.writer(csvfile)

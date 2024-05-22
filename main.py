@@ -1,3 +1,5 @@
+# main.py
+
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QPushButton, QFileDialog, QSlider, QHBoxLayout, \
     QVBoxLayout, QAction, QMenu, QMenuBar
 from PyQt5.QtGui import QCursor
@@ -10,6 +12,7 @@ from interpolation import Interpolation
 from data_exporter import DataExporter
 import cv2
 import numpy as np
+from point import Point
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -28,7 +31,7 @@ class MainWindow(QMainWindow):
         self.original_image = None
 
     def initUI(self):
-        self.setWindowTitle('Engauge Digitizer')
+        self.setWindowTitle('Numericizer')
         self.setGeometry(100, 100, 800, 600)
 
         self.image_view = ImageView(self)
@@ -45,6 +48,10 @@ class MainWindow(QMainWindow):
         calibrationAction.triggered.connect(self.toggle_calibration_mode)
         toolsMenu.addAction(calibrationAction)
 
+        automaticCalibrationAction = QAction('&Automatic Calibration', self)
+        automaticCalibrationAction.triggered.connect(self.automatic_calibration)
+        toolsMenu.addAction(automaticCalibrationAction)
+
         extractionAction = QAction('&Extract Data', self)
         extractionAction.triggered.connect(self.toggle_extraction_mode)
         toolsMenu.addAction(extractionAction)
@@ -53,84 +60,42 @@ class MainWindow(QMainWindow):
         interpolationAction.triggered.connect(self.toggle_interpolation_mode)
         toolsMenu.addAction(interpolationAction)
 
-        exportAction = QAction('&Export Data', self)
-        exportAction.triggered.connect(self.export_data)
-        toolsMenu.addAction(exportAction)
+        # New Image Processing Actions
+        histogramAction = QAction('&Equalize Histogram', self)
+        histogramAction.triggered.connect(self.equalize_histogram)
+        toolsMenu.addAction(histogramAction)
 
-        toolbar = self.addToolBar('Tools')
-        toolbar.addAction(calibrationAction)
-        toolbar.addAction(extractionAction)
-        toolbar.addAction(interpolationAction)
-        toolbar.addAction(exportAction)
+        edgeAction = QAction('&Edge Detection', self)
+        edgeAction.triggered.connect(self.edge_detection)
+        toolsMenu.addAction(edgeAction)
 
-        self.brightness_label = QLabel("Brightness:", self)
-        self.brightness_slider = QSlider(Qt.Horizontal, self)
-        self.brightness_slider.setRange(-255, 255)
-        self.brightness_slider.setValue(0)
-        self.brightness_slider.valueChanged.connect(self.update_image)
-
-        self.contrast_label = QLabel("Contrast:", self)
-        self.contrast_slider = QSlider(Qt.Horizontal, self)
-        self.contrast_slider.setRange(-255, 255)
-        self.contrast_slider.setValue(0)
-        self.contrast_slider.valueChanged.connect(self.update_image)
-
-        slider_layout = QHBoxLayout()
-        slider_layout.addWidget(self.brightness_label)
-        slider_layout.addWidget(self.brightness_slider)
-        slider_layout.addWidget(self.contrast_label)
-        slider_layout.addWidget(self.contrast_slider)
-
-        main_layout = QVBoxLayout()
-        main_layout.addLayout(slider_layout)
-        main_layout.addWidget(self.image_view)
-
-        central_widget = QWidget()
-        central_widget.setLayout(main_layout)
-        self.setCentralWidget(central_widget)
+        denoiseAction = QAction('&Denoise Image', self)
+        denoiseAction.triggered.connect(self.denoise_image)
+        toolsMenu.addAction(denoiseAction)
 
     def open_image(self):
         options = QFileDialog.Options()
-        filepath, _ = QFileDialog.getOpenFileName(self, "Select Image", "",
-                                                  "Image Files (*.jpg *.jpeg *.png);;All Files (*)", options=options)
-        if filepath:
-            self.image_processor.load_image(filepath)
-            self.calibration.reset_calibration()
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image File", "", "Images (*.png *.xpm *.jpg *.jpeg *.bmp);;All Files (*)", options=options)
+        if file_path:
+            self.image_processor.load_image(file_path)
             self.original_image = self.image_processor.image.copy()
-            self.brightness_slider.setValue(0)
-            self.contrast_slider.setValue(0)
-            self.update_image()
+            self.image_view.set_image(self.image_processor.image)
 
     def update_image(self):
-        if self.original_image is not None:
-            brightness = self.brightness_slider.value()
-            contrast = self.contrast_slider.value()
-            self.apply_brightness_contrast(brightness, contrast)
-
-            # Update image view with processed image and points
+        if self.image_processor.image is not None:
             self.image_view.set_image(self.image_processor.image)
-            self.image_view.draw_calibration_points(self.calibration.calibration_points)
-            self.image_view.draw_data_points(self.extraction.data_points)
-            if self.interpolation_mode:
-                self.image_view.draw_data_points(
-                    self.interpolation.interpolated_points
-                )
 
-    def apply_brightness_contrast(self, brightness, contrast):
-        """Applies brightness and contrast adjustments to the image."""
-        img = self.original_image.copy()
-        hsv = cv2.cvtColor(img, cv2.COLOR_BGR2HSV)
-        h, s, v = cv2.split(hsv)
-        v = cv2.add(v, brightness)
-        v = np.clip(v, 0, 255).astype(np.uint8)
-        final_hsv = cv2.merge((h, s, v))
-        processed_image = cv2.cvtColor(final_hsv, cv2.COLOR_HSV2BGR)
+    def equalize_histogram(self):
+        self.image_processor.equalize_histogram()
+        self.update_image()
 
-        contrast = contrast / 255.0
-        processed_image = cv2.addWeighted(processed_image, 1 + contrast,
-                                          np.zeros(img.shape, img.dtype),
-                                          0, -contrast * 128)
-        self.image_processor.image = processed_image
+    def edge_detection(self):
+        self.image_processor.edge_detection()
+        self.update_image()
+
+    def denoise_image(self):
+        self.image_processor.denoise_image()
+        self.update_image()
 
     def toggle_calibration_mode(self):
         self.calibration_mode = not self.calibration_mode
@@ -151,28 +116,31 @@ class MainWindow(QMainWindow):
 
         if self.interpolation_mode:
             self.interpolation.calibration = self.calibration
+            print("Interpolation mode activated.")
+            print("Data points:", self.extraction.data_points)
             self.interpolation.interpolate_data(self.extraction.data_points)
             self.update_image()
 
     def export_data(self):
         if self.calibration.calibration_done:
             if self.interpolation_mode:
-                real_coordinates = self.calibration.transform_points(
-                    self.interpolation.interpolated_points
-                )
+                real_coordinates = [point.get_real_coordinates() for point in self.interpolation.interpolated_points]
             else:
-                real_coordinates = self.calibration.transform_points(
-                    self.extraction.data_points
-                )
+                real_coordinates = [point.get_real_coordinates() for point in self.extraction.data_points]
             if real_coordinates:
                 options = QFileDialog.Options()
-                filepath, _ = QFileDialog.getSaveFileName(self, "Save Data", "",
-                                                          "CSV Files (*.csv);;All Files (*)", options=options)
+                filepath, _ = QFileDialog.getSaveFileName(self, "Save Data", "", "CSV Files (*.csv);;All Files (*)", options=options)
                 if filepath:
                     self.data_exporter.export_to_csv(real_coordinates, filepath)
         else:
             print("Calibration is required before exporting data points.")
 
+    def automatic_calibration(self):
+        if self.image_processor.image is not None:
+            print("Running automatic calibration...")
+            self.calibration.automatic_calibration(self.image_processor.image)
+        else:
+            print("Load an image first.")
 
 if __name__ == '__main__':
     app = QApplication([])

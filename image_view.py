@@ -1,5 +1,7 @@
+# image_view.py
+
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem
-from PyQt5.QtGui import QPixmap, QImage
+from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QFont
 from PyQt5.QtCore import Qt, QPointF
 from PyQt5 import QtGui
 
@@ -13,11 +15,21 @@ class ImageView(QGraphicsView):
         self.main_window = parent
         self.calibration_points_graphics = []
         self.data_points_graphics = []
+        self.interpolated_points_graphics = []
+        self.highlighted_point = None
 
     def set_image(self, image):
-        height, width, channel = image.shape
-        bytes_per_line = 3 * width
-        q_image = QImage(image.data, width, height, bytes_per_line, QImage.Format_RGB888).rgbSwapped()
+        if len(image.shape) == 3:
+            height, width, channel = image.shape
+            bytes_per_line = 3 * width
+            q_image = QImage(image.data, width, height, bytes_per_line, QImage.Format_RGB888).rgbSwapped()
+        elif len(image.shape) == 2:
+            height, width = image.shape
+            bytes_per_line = width
+            q_image = QImage(image.data, width, height, bytes_per_line, QImage.Format_Grayscale8)
+        else:
+            raise ValueError("Unsupported image format")
+
         self.pixmap = QPixmap.fromImage(q_image)
         if self.pixmap_item is None:
             self.pixmap_item = QGraphicsPixmapItem(self.pixmap)
@@ -25,6 +37,7 @@ class ImageView(QGraphicsView):
             self.fitInView(self.pixmap_item, Qt.KeepAspectRatio)
         else:
             self.pixmap_item.setPixmap(self.pixmap)
+        self.update_scene()
 
     def wheelEvent(self, event):
         if self.pixmap_item:
@@ -39,27 +52,54 @@ class ImageView(QGraphicsView):
             if self.pixmap_item.contains(scene_pos):
                 if self.main_window.calibration_mode:
                     self.main_window.calibration.add_calibration_point(scene_pos)
-                    self.main_window.update_image()  # Update image to show points
+                    self.update_scene()  # Update scene to show points
                 elif self.main_window.extraction_mode:
                     self.main_window.extraction.add_data_point(scene_pos)
-                    self.main_window.update_image()  # Update image to show points
+                    self.update_scene()  # Update scene to show points
 
     def draw_calibration_points(self, calibration_points):
         for point_graphic in self.calibration_points_graphics:
             self.scene.removeItem(point_graphic)
         self.calibration_points_graphics = []
-
-        for point in calibration_points:
-            x, y = point.x(), point.y()
-            point_graphic = self.scene.addEllipse(x - 3, y - 3, 6, 6, QtGui.QPen(Qt.red), QtGui.QBrush(Qt.red))
+        for i, point in enumerate(calibration_points):
+            x, y = point.get_image_coordinates()
+            point_graphic = self.scene.addEllipse(x - 3, y - 3, 6, 6, QPen(Qt.red), QBrush(Qt.red))
+            text = self.scene.addText(str(i + 1), QFont('Arial', 10))
+            text.setPos(x + 5, y - 10)
+            text.setDefaultTextColor(Qt.red)
             self.calibration_points_graphics.append(point_graphic)
+            self.calibration_points_graphics.append(text)
+        if self.highlighted_point:
+            x, y = self.highlighted_point
+            self.scene.addEllipse(x - 5, y - 5, 10, 10, QPen(Qt.yellow, 2))
 
     def draw_data_points(self, data_points):
         for point_graphic in self.data_points_graphics:
             self.scene.removeItem(point_graphic)
         self.data_points_graphics = []
-
         for point in data_points:
-            x, y = point.x(), point.y()
-            point_graphic = self.scene.addEllipse(x - 3, y - 3, 6, 6, QtGui.QPen(Qt.blue), QtGui.QBrush(Qt.blue))
+            x, y = point.get_image_coordinates()
+            point_graphic = self.scene.addEllipse(x - 3, y - 3, 6, 6, QPen(Qt.blue), QBrush(Qt.blue))
             self.data_points_graphics.append(point_graphic)
+
+    def draw_interpolated_points(self, interpolated_points):
+        for point_graphic in self.interpolated_points_graphics:
+            self.scene.removeItem(point_graphic)
+        self.interpolated_points_graphics = []
+        for point in interpolated_points:
+            x, y = point.get_image_coordinates()
+            point_graphic = self.scene.addEllipse(x - 2, y - 2, 4, 4, QPen(Qt.green), QBrush(Qt.green))
+            self.interpolated_points_graphics.append(point_graphic)
+
+    def highlight_point(self, point):
+        self.highlighted_point = point.get_image_coordinates()
+        self.update_scene()
+
+    def clear_highlight(self):
+        self.highlighted_point = None
+        self.update_scene()
+
+    def update_scene(self):
+        self.draw_calibration_points(self.main_window.calibration.calibration_points)
+        self.draw_data_points(self.main_window.extraction.data_points)
+        self.draw_interpolated_points(self.main_window.interpolation.interpolated_points)

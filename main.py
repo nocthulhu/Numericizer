@@ -17,7 +17,7 @@ class MainWindow(QMainWindow):
         self.image_processor = ImageProcessor()
         self.calibration = Calibration(self)
         self.extraction = Extraction()
-        self.interpolation = Interpolation()
+        self.interpolation = Interpolation(self.calibration)
         self.data_exporter = DataExporter()
         self.initUI()
 
@@ -150,6 +150,7 @@ class MainWindow(QMainWindow):
         self.extraction_mode = False
 
         if self.interpolation_mode:
+            self.interpolation.calibration = self.calibration
             self.interpolation.interpolate_data(self.extraction.data_points)
             self.update_image()
 

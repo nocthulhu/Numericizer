@@ -45,3 +45,12 @@ class Calibration:
         self.real_world_coordinates.clear()
         self.transformation_matrix = None
 
+
+    def inverse_transform_point(self, x, y):
+        if self.transformation_matrix is not None:
+            inverse_matrix = cv2.invertAffineTransform(self.transformation_matrix)
+            point = np.array([x, y, 1])
+            transformed_point = np.dot(inverse_matrix, point)
+            return transformed_point[0], transformed_point[1]  # x, y döndür
+        else:
+            return None

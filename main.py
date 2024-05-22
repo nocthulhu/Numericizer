@@ -12,15 +12,12 @@ import cv2
 import numpy as np
 
 class MainWindow(QMainWindow):
-    """
-    Handles user interface, image processing, calibration, data extraction, interpolation, data expor etc.
-    """
     def __init__(self):
         super().__init__()
         self.image_processor = ImageProcessor()
         self.calibration = Calibration(self)
-        self.extraction = Extraction(self)
-        self.interpolation = Interpolation(self)
+        self.extraction = Extraction()
+        self.interpolation = Interpolation()
         self.data_exporter = DataExporter()
         self.initUI()
 
@@ -31,15 +28,12 @@ class MainWindow(QMainWindow):
         self.original_image = None
 
     def initUI(self):
-        """Initializes the user interface, including menus, toolbar, and sliders."""
         self.setWindowTitle('Engauge Digitizer')
         self.setGeometry(100, 100, 800, 600)
 
-        # Image View
         self.image_view = ImageView(self)
         self.setCentralWidget(self.image_view)
 
-        # Menu Bar
         menubar = self.menuBar()
         fileMenu = menubar.addMenu('&File')
         openAction = QAction('&Open Image', self)
@@ -63,34 +57,30 @@ class MainWindow(QMainWindow):
         exportAction.triggered.connect(self.export_data)
         toolsMenu.addAction(exportAction)
 
-        # Toolbar
         toolbar = self.addToolBar('Tools')
         toolbar.addAction(calibrationAction)
         toolbar.addAction(extractionAction)
         toolbar.addAction(interpolationAction)
         toolbar.addAction(exportAction)
 
-        # Brightness and Contrast Sliders
         self.brightness_label = QLabel("Brightness:", self)
         self.brightness_slider = QSlider(Qt.Horizontal, self)
         self.brightness_slider.setRange(-255, 255)
         self.brightness_slider.setValue(0)
-        self.brightness_slider.valueChanged.connect(self.adjust_brightness)
+        self.brightness_slider.valueChanged.connect(self.update_image)
 
         self.contrast_label = QLabel("Contrast:", self)
         self.contrast_slider = QSlider(Qt.Horizontal, self)
         self.contrast_slider.setRange(-255, 255)
         self.contrast_slider.setValue(0)
-        self.contrast_slider.valueChanged.connect(self.adjust_contrast)
+        self.contrast_slider.valueChanged.connect(self.update_image)
 
-        # Layout for sliders
         slider_layout = QHBoxLayout()
         slider_layout.addWidget(self.brightness_label)
         slider_layout.addWidget(self.brightness_slider)
         slider_layout.addWidget(self.contrast_label)
         slider_layout.addWidget(self.contrast_slider)
 
-        # Main layout
         main_layout = QVBoxLayout()
         main_layout.addLayout(slider_layout)
         main_layout.addWidget(self.image_view)
@@ -100,7 +90,6 @@ class MainWindow(QMainWindow):
         self.setCentralWidget(central_widget)
 
     def open_image(self):
-        """Opens an image file using a file dialog."""
         options = QFileDialog.Options()
         filepath, _ = QFileDialog.getOpenFileName(self, "Select Image", "",
                                                   "Image Files (*.jpg *.jpeg *.png);;All Files (*)", options=options)
@@ -110,17 +99,22 @@ class MainWindow(QMainWindow):
             self.original_image = self.image_processor.image.copy()
             self.brightness_slider.setValue(0)
             self.contrast_slider.setValue(0)
-            self.update_image_view()
+            self.update_image()
 
-    def adjust_brightness(self, value):
-        """Adjusts the brightness of the image."""
+    def update_image(self):
         if self.original_image is not None:
-            self.apply_brightness_contrast(value, self.contrast_slider.value())
+            brightness = self.brightness_slider.value()
+            contrast = self.contrast_slider.value()
+            self.apply_brightness_contrast(brightness, contrast)
 
-    def adjust_contrast(self, value):
-        """Adjusts the contrast of the image."""
-        if self.original_image is not None:
-            self.apply_brightness_contrast(self.brightness_slider.value(), value)
+            # Update image view with processed image and points
+            self.image_view.set_image(self.image_processor.image)
+            self.image_view.draw_calibration_points(self.calibration.calibration_points)
+            self.image_view.draw_data_points(self.extraction.data_points)
+            if self.interpolation_mode:
+                self.image_view.draw_data_points(
+                    self.interpolation.interpolated_points
+                )
 
     def apply_brightness_contrast(self, brightness, contrast):
         """Applies brightness and contrast adjustments to the image."""
@@ -137,69 +131,47 @@ class MainWindow(QMainWindow):
                                           np.zeros(img.shape, img.dtype),
                                           0, -contrast * 128)
         self.image_processor.image = processed_image
-        self.update_image_view()
-
-    def update_image_view(self):
-        """Updates the image view with the processed image and any drawn points."""
-        if self.image_processor.image is not None:
-            self.image_view.set_image(self.image_processor.image)
-
-            if self.calibration_mode:
-                self.image_view.draw_calibration_points(self.calibration.calibration_points)
-            elif self.extraction_mode:
-                self.image_view.draw_data_points(self.extraction.data_points)
-            elif self.interpolation_mode:
-                self.image_view.draw_data_points(self.interpolation.interpolated_points)
 
     def toggle_calibration_mode(self):
-        """Toggles calibration mode on or off."""
         self.calibration_mode = not self.calibration_mode
         self.extraction_mode = False
         self.interpolation_mode = False
-        if self.calibration_mode:
-            self.setCursor(QCursor(Qt.CrossCursor))
-        else:
-            self.setCursor(QCursor(Qt.ArrowCursor))
+        self.setCursor(QCursor(Qt.CrossCursor if self.calibration_mode else Qt.ArrowCursor))
 
     def toggle_extraction_mode(self):
-        """Toggles data extraction mode on or off."""
         self.extraction_mode = not self.extraction_mode
         self.calibration_mode = False
         self.interpolation_mode = False
-        if self.extraction_mode:
-            self.setCursor(QCursor(Qt.CrossCursor))
-        else:
-            self.setCursor(QCursor(Qt.ArrowCursor))
+        self.setCursor(QCursor(Qt.CrossCursor if self.extraction_mode else Qt.ArrowCursor))
 
     def toggle_interpolation_mode(self):
-        """
-        Toggles interpolation mode.
-        Calculates real-world coordinates for interpolated points if calibration is done.
-        """
         self.interpolation_mode = not self.interpolation_mode
         self.calibration_mode = False
         self.extraction_mode = False
 
         if self.interpolation_mode:
             self.interpolation.interpolate_data(self.extraction.data_points)
-            if self.calibration.calibration_done:
-                self.interpolation.interpolated_real_coordinates = [
-                    self.calibration.transform_point(p) for p in self.interpolation.interpolated_points
-                ]
-        else:
-            self.setCursor(QCursor(Qt.ArrowCursor))
+            self.update_image()
 
     def export_data(self):
-        """Exports data points to a CSV file using a file dialog."""
-        if self.extraction.real_coordinates:
-            options = QFileDialog.Options()
-            filepath, _ = QFileDialog.getSaveFileName(self, "Save Data", "",
-                                                      "CSV Files (*.csv);;All Files (*)", options=options)
-            if filepath:
-                if self.interpolation_mode:
-                    self.data_exporter.export_to_csv(self.interpolation.interpolated_real_coordinates, filepath)
-                else:
-                    self.data_exporter.export_to_csv(self.extraction.real_coordinates, filepath)
+        if self.calibration.calibration_done:
+            if self.interpolation_mode:
+                real_coordinates = self.calibration.transform_points(
+                    self.interpolation.interpolated_points
+                )
+            else:
+                real_coordinates = self.calibration.transform_points(
+                    self.extraction.data_points
+                )
+            if real_coordinates:
+                options = QFileDialog.Options()
+                filepath, _ = QFileDialog.getSaveFileName(self, "Save Data", "",
+                                                          "CSV Files (*.csv);;All Files (*)", options=options)
+                if filepath:
+                    self.data_exporter.export_to_csv(real_coordinates, filepath)
+        else:
+            print("Calibration is required before exporting data points.")
+
 
 if __name__ == '__main__':
     app = QApplication([])

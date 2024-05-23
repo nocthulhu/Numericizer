@@ -6,7 +6,7 @@ class Extraction:
         self.data_points = []  # List of Point objects
 
     def add_data_point(self, point):
-        if len(self.data_points) < 10:  # Örneğin maksimum 10 nokta
+        if len(self.data_points) < 10:
             point_obj = Point(point, point_type='data')
             self.data_points.append(point_obj)
 

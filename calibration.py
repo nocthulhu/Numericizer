@@ -1,11 +1,8 @@
-# calibration.py
-
 from PyQt5.QtCore import QPointF
 from calibration_dialog import CalibrationDialog
 from point import Point
 import numpy as np
 import cv2
-
 
 class Calibration:
     def __init__(self, main_window):
@@ -33,16 +30,17 @@ class Calibration:
                 self.main_window.image_view.clear_highlight()
 
     def calculate_transformation_matrix(self):
-        image_points = np.array([p.get_image_coordinates() for p in self.calibration_points])
+        image_points = np.array([[p.get_image_coordinates().x(), p.get_image_coordinates().y()] for p in self.calibration_points])
         real_coords = np.array([p.get_real_coordinates() for p in self.calibration_points])
         self.transformation_matrix = cv2.getAffineTransform(
             image_points.astype(np.float32), real_coords.astype(np.float32)
         )
         self.calibration_done = True
+        self.main_window.interpolationAction.setEnabled(True)
 
     def transform_points(self, points):
         if self.transformation_matrix is not None:
-            image_points = np.array([[p.get_image_coordinates()[0], p.get_image_coordinates()[1], 1] for p in points])
+            image_points = np.array([[p.get_image_coordinates().x(), p.get_image_coordinates().y(), 1] for p in points])
             transformed_points = np.dot(self.transformation_matrix, image_points.T).T
             for i, point in enumerate(points):
                 point.set_real_coordinates((transformed_points[i][0], transformed_points[i][1]))
@@ -53,6 +51,7 @@ class Calibration:
     def reset_calibration(self):
         self.calibration_points.clear()
         self.transformation_matrix = None
+        self.calibration_done = False  # Kalibrasyon sıfırlandığında bayrağı ayarla
 
     def inverse_transform_point(self, x, y):
         if self.transformation_matrix is not None:

@@ -51,34 +51,41 @@ class MainWindow(QMainWindow):
         fileMenu.addAction(exportAction)
 
         toolsMenu = menubar.addMenu('&Tools')
-        calibrationAction = QAction('&Calibrate Axes', self)
-        calibrationAction.triggered.connect(self.toggle_calibration_mode)
-        toolsMenu.addAction(calibrationAction)
+        self.calibrationAction = QAction('&Calibrate Axes', self)
+        self.calibrationAction.setEnabled(False)
+        self.calibrationAction.triggered.connect(self.toggle_calibration_mode)
+        toolsMenu.addAction(self.calibrationAction)
 
-        automaticCalibrationAction = QAction('&Automatic Calibration (Experimental)', self)
-        automaticCalibrationAction.triggered.connect(self.automatic_calibration)
-        toolsMenu.addAction(automaticCalibrationAction)
+        self.automaticCalibrationAction = QAction('&Automatic Calibration (Experimental)', self)
+        self.automaticCalibrationAction.setEnabled(False)
+        self.automaticCalibrationAction.triggered.connect(self.automatic_calibration)
+        toolsMenu.addAction(self.automaticCalibrationAction)
 
-        extractionAction = QAction('&Extract Data', self)
-        extractionAction.triggered.connect(self.toggle_extraction_mode)
-        toolsMenu.addAction(extractionAction)
+        self.extractionAction = QAction('&Extract Data', self)
+        self.extractionAction.setEnabled(False)
+        self.extractionAction.triggered.connect(self.toggle_extraction_mode)
+        toolsMenu.addAction(self.extractionAction)
 
-        interpolationAction = QAction('&Interpolate Data', self)
-        interpolationAction.triggered.connect(self.toggle_interpolation_mode)
-        toolsMenu.addAction(interpolationAction)
+        self.interpolationAction = QAction('&Interpolate Data', self)
+        self.interpolationAction.setEnabled(False)
+        self.interpolationAction.triggered.connect(self.toggle_interpolation_mode)
+        toolsMenu.addAction(self.interpolationAction)
 
         # New Image Processing Actions
-        histogramAction = QAction('&Equalize Histogram', self)
-        histogramAction.triggered.connect(self.equalize_histogram)
-        toolsMenu.addAction(histogramAction)
+        self.histogramAction = QAction('&Equalize Histogram', self)
+        self.histogramAction.setEnabled(False)
+        self.histogramAction.triggered.connect(self.equalize_histogram)
+        toolsMenu.addAction(self.histogramAction)
 
-        edgeAction = QAction('&Edge Detection', self)
-        edgeAction.triggered.connect(self.edge_detection)
-        toolsMenu.addAction(edgeAction)
+        self.edgeAction = QAction('&Edge Detection', self)
+        self.edgeAction.setEnabled(False)
+        self.edgeAction.triggered.connect(self.edge_detection)
+        toolsMenu.addAction(self.edgeAction)
 
-        denoiseAction = QAction('&Denoise Image', self)
-        denoiseAction.triggered.connect(self.denoise_image)
-        toolsMenu.addAction(denoiseAction)
+        self.denoiseAction = QAction('&Denoise Image', self)
+        self.denoiseAction.setEnabled(False)
+        self.denoiseAction.triggered.connect(self.denoise_image)
+        toolsMenu.addAction(self.denoiseAction)
 
         # Data points management
         self.data_points_list = QListWidget(self)
@@ -106,6 +113,14 @@ class MainWindow(QMainWindow):
             self.image_processor.load_image(file_path)
             self.original_image = self.image_processor.image.copy()
             self.image_view.set_image(self.image_processor.image)
+
+            # Enable tools once an image is loaded
+            self.calibrationAction.setEnabled(True)
+            self.automaticCalibrationAction.setEnabled(True)
+            self.extractionAction.setEnabled(True)
+            self.histogramAction.setEnabled(True)
+            self.edgeAction.setEnabled(True)
+            self.denoiseAction.setEnabled(True)
 
     def update_image(self):
         if self.image_processor.image is not None:
@@ -136,6 +151,12 @@ class MainWindow(QMainWindow):
         self.setCursor(QCursor(Qt.CrossCursor if self.extraction_mode else Qt.ArrowCursor))
 
     def toggle_interpolation_mode(self):
+        """Toggles the interpolation mode."""
+        if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 3:
+            QMessageBox.warning(self, "Calibration Required",
+                                "Calibration is required before interpolation. Please calibrate at least 3 points.")
+            return
+
         self.interpolation_mode = not self.interpolation_mode
         self.calibration_mode = False
         self.extraction_mode = False
@@ -149,20 +170,22 @@ class MainWindow(QMainWindow):
             self.update_image()
 
     def export_data(self):
-        if self.calibration.calibration_done:
-            if self.interpolation_mode:
-                real_coordinates = [point.get_real_coordinates() for point in self.interpolation.interpolated_points]
-            else:
-                real_coordinates = [point.get_real_coordinates() for point in self.extraction.data_points]
-            if real_coordinates:
-                options = QFileDialog.Options()
-                filepath, _ = QFileDialog.getSaveFileName(self, "Save Data", "", "CSV Files (*.csv);;All Files (*)",
-                                                          options=options)
-                if filepath:
-                    self.data_exporter.export_to_csv(real_coordinates, filepath)
-        else:
-            QMessageBox.warning(self, "Calibration Required", "Calibration is required before exporting data points.")
+        if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 3:
+            QMessageBox.warning(self, "Calibration Required",
+                                "Calibration is required before exporting data points. Please calibrate at least 3 points.")
+            return
 
+        if self.interpolation_mode:
+            real_coordinates = [point.get_real_coordinates() for point in self.interpolation.interpolated_points]
+        else:
+            real_coordinates = [point.get_real_coordinates() for point in self.extraction.data_points]
+
+        if real_coordinates:
+            options = QFileDialog.Options()
+            filepath, _ = QFileDialog.getSaveFileName(self, "Save Data", "", "CSV Files (*.csv);;All Files (*)",
+                                                      options=options)
+            if filepath:
+                self.data_exporter.export_to_csv(real_coordinates, filepath)
     def automatic_calibration(self):
         if self.image_processor.image is not None:
             print("Running automatic calibration...")
@@ -224,19 +247,24 @@ class MainWindow(QMainWindow):
                 self.update_image()
 
     def plot_data_points(self):
+        """Plots the data points."""
         data_points = self.extraction.get_data_points()
         if not data_points:
             print("No data points to plot.")
             return
 
-        x_coords = [point.get_real_coordinates()[0] for point in data_points]
-        y_coords = [point.get_real_coordinates()[1] for point in data_points]
+        # Filtreleyerek None değerlerini çıkaralım
+        valid_data_points = [point for point in data_points if point.get_real_coordinates() is not None]
+        x_coords = [point.get_real_coordinates()[0] for point in valid_data_points]
+        y_coords = [point.get_real_coordinates()[1] for point in valid_data_points]
 
         plt.scatter(x_coords, y_coords, c='blue', label='Data Points')
 
         if self.interpolation_mode and self.interpolation.interpolated_points:
-            x_interp_coords = [point.get_real_coordinates()[0] for point in self.interpolation.interpolated_points]
-            y_interp_coords = [point.get_real_coordinates()[1] for point in self.interpolation.interpolated_points]
+            valid_interpolated_points = [point for point in self.interpolation.interpolated_points if
+                                         point.get_real_coordinates() is not None]
+            x_interp_coords = [point.get_real_coordinates()[0] for point in valid_interpolated_points]
+            y_interp_coords = [point.get_real_coordinates()[1] for point in valid_interpolated_points]
             plt.scatter(x_interp_coords, y_interp_coords, c='red', label='Interpolated Points')
 
         plt.xlabel('X Coordinates')
@@ -244,7 +272,6 @@ class MainWindow(QMainWindow):
         plt.title('Data Points Plot')
         plt.legend()
         plt.show()
-
 
 if __name__ == '__main__':
     app = QApplication([])

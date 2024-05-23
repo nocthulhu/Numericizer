@@ -22,11 +22,11 @@ class ImageProcessor:
 
     def equalize_histogram(self):
         if self.image is not None:
-            if len(self.image.shape) == 3:  # Renkli görüntü
+            if len(self.image.shape) == 3:  # Mixed Color
                 img_yuv = cv2.cvtColor(self.image, cv2.COLOR_BGR2YUV)
                 img_yuv[:, :, 0] = cv2.equalizeHist(img_yuv[:, :, 0])
                 self.image = cv2.cvtColor(img_yuv, cv2.COLOR_YUV2BGR)
-            elif len(self.image.shape) == 2:  # Grayscale görüntü
+            elif len(self.image.shape) == 2:  # Grayscale
                 self.image = cv2.equalizeHist(self.image)
             else:
                 print("Unsupported image format for histogram equalization.")

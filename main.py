@@ -253,7 +253,7 @@ class MainWindow(QMainWindow):
             print("No data points to plot.")
             return
 
-        # Filtreleyerek None değerlerini çıkaralım
+
         valid_data_points = [point for point in data_points if point.get_real_coordinates() is not None]
         x_coords = [point.get_real_coordinates()[0] for point in valid_data_points]
         y_coords = [point.get_real_coordinates()[1] for point in valid_data_points]

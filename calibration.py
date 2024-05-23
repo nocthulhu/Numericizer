@@ -51,7 +51,7 @@ class Calibration:
     def reset_calibration(self):
         self.calibration_points.clear()
         self.transformation_matrix = None
-        self.calibration_done = False  # Kalibrasyon sıfırlandığında bayrağı ayarla
+        self.calibration_done = False
 
     def inverse_transform_point(self, x, y):
         if self.transformation_matrix is not None:

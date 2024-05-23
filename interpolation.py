@@ -13,7 +13,7 @@ class Interpolation:
         if len(data_points) > 1:
             self.interpolated_points.clear()
 
-            # Ensure real-world coordinates are set for each point
+
             self.calibration.transform_points(data_points)
             real_coordinates = [p.get_real_coordinates() for p in data_points]
 

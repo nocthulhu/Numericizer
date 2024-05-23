@@ -41,9 +41,9 @@ class ImageProcessor:
 
     def denoise_image(self):
         if self.image is not None:
-            if len(self.image.shape) == 3:  # 3 kanal (renkli) görüntü
+            if len(self.image.shape) == 3:
                 self.image = cv2.fastNlMeansDenoisingColored(self.image, None, 10, 10, 7, 21)
-            elif len(self.image.shape) == 2:  # 1 kanal (grayscale) görüntü
+            elif len(self.image.shape) == 2:
                 self.image = cv2.fastNlMeansDenoising(self.image, None, 10, 7, 21)
             else:
                 print("Unsupported image format for denoising.")

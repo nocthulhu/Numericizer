@@ -1,9 +1,9 @@
 # main.py
 
 from PyQt5.QtWidgets import QApplication, QMainWindow, QLabel, QWidget, QPushButton, QFileDialog, QSlider, QHBoxLayout, \
-    QVBoxLayout, QAction, QMenu, QMenuBar
+    QVBoxLayout, QAction, QMenu, QMenuBar, QListWidget, QListWidgetItem, QInputDialog, QMessageBox
 from PyQt5.QtGui import QCursor
-from PyQt5.QtCore import Qt
+from PyQt5.QtCore import Qt, QPointF
 from image_view import ImageView
 from image_processor import ImageProcessor
 from calibration import Calibration
@@ -13,6 +13,8 @@ from data_exporter import DataExporter
 import cv2
 import numpy as np
 from point import Point
+import matplotlib.pyplot as plt
+
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -22,17 +24,18 @@ class MainWindow(QMainWindow):
         self.extraction = Extraction()
         self.interpolation = Interpolation(self.calibration)
         self.data_exporter = DataExporter()
-        self.initUI()
 
+        # Initialize mode flags
         self.calibration_mode = False
         self.extraction_mode = False
         self.interpolation_mode = False
 
         self.original_image = None
+        self.initUI()
 
     def initUI(self):
         self.setWindowTitle('Numericizer')
-        self.setGeometry(100, 100, 800, 600)
+        self.setGeometry(100, 100, 1000, 600)
 
         self.image_view = ImageView(self)
         self.setCentralWidget(self.image_view)
@@ -43,12 +46,16 @@ class MainWindow(QMainWindow):
         openAction.triggered.connect(self.open_image)
         fileMenu.addAction(openAction)
 
+        exportAction = QAction('&Export Data', self)
+        exportAction.triggered.connect(self.export_data)
+        fileMenu.addAction(exportAction)
+
         toolsMenu = menubar.addMenu('&Tools')
         calibrationAction = QAction('&Calibrate Axes', self)
         calibrationAction.triggered.connect(self.toggle_calibration_mode)
         toolsMenu.addAction(calibrationAction)
 
-        automaticCalibrationAction = QAction('&Automatic Calibration', self)
+        automaticCalibrationAction = QAction('&Automatic Calibration (Experimental)', self)
         automaticCalibrationAction.triggered.connect(self.automatic_calibration)
         toolsMenu.addAction(automaticCalibrationAction)
 
@@ -73,9 +80,28 @@ class MainWindow(QMainWindow):
         denoiseAction.triggered.connect(self.denoise_image)
         toolsMenu.addAction(denoiseAction)
 
+        # Data points management
+        self.data_points_list = QListWidget(self)
+        self.data_points_list.setGeometry(800, 50, 200, 500)
+        self.data_points_list.itemDoubleClicked.connect(self.edit_data_point)
+
+        deletePointAction = QAction('&Delete Data Point', self)
+        deletePointAction.triggered.connect(self.delete_data_point)
+        toolsMenu.addAction(deletePointAction)
+
+        self.show_data_points()
+
+        # New View Menu for plotting data points
+        viewMenu = self.menuBar().addMenu('&View')
+        plotPointsAction = QAction('&Plot Data Points', self)
+        plotPointsAction.triggered.connect(self.plot_data_points)
+        viewMenu.addAction(plotPointsAction)
+
     def open_image(self):
         options = QFileDialog.Options()
-        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image File", "", "Images (*.png *.xpm *.jpg *.jpeg *.bmp);;All Files (*)", options=options)
+        file_path, _ = QFileDialog.getOpenFileName(self, "Open Image File", "",
+                                                   "Images (*.png *.xpm *.jpg *.jpeg *.bmp);;All Files (*)",
+                                                   options=options)
         if file_path:
             self.image_processor.load_image(file_path)
             self.original_image = self.image_processor.image.copy()
@@ -119,6 +145,7 @@ class MainWindow(QMainWindow):
             print("Interpolation mode activated.")
             print("Data points:", self.extraction.data_points)
             self.interpolation.interpolate_data(self.extraction.data_points)
+            self.show_data_points()  # Add this line to update the list
             self.update_image()
 
     def export_data(self):
@@ -129,11 +156,12 @@ class MainWindow(QMainWindow):
                 real_coordinates = [point.get_real_coordinates() for point in self.extraction.data_points]
             if real_coordinates:
                 options = QFileDialog.Options()
-                filepath, _ = QFileDialog.getSaveFileName(self, "Save Data", "", "CSV Files (*.csv);;All Files (*)", options=options)
+                filepath, _ = QFileDialog.getSaveFileName(self, "Save Data", "", "CSV Files (*.csv);;All Files (*)",
+                                                          options=options)
                 if filepath:
                     self.data_exporter.export_to_csv(real_coordinates, filepath)
         else:
-            print("Calibration is required before exporting data points.")
+            QMessageBox.warning(self, "Calibration Required", "Calibration is required before exporting data points.")
 
     def automatic_calibration(self):
         if self.image_processor.image is not None:
@@ -141,6 +169,82 @@ class MainWindow(QMainWindow):
             self.calibration.automatic_calibration(self.image_processor.image)
         else:
             print("Load an image first.")
+
+    def show_data_points(self):
+        self.data_points_list.clear()
+        data_points = self.extraction.get_data_points()
+        interpolated_points = self.interpolation.interpolated_points if self.interpolation_mode else []
+
+        for i, point in enumerate(data_points):
+            item = QListWidgetItem(f"Data Point {i + 1}: {point.get_real_coordinates()}")
+            self.data_points_list.addItem(item)
+
+        for i, point in enumerate(interpolated_points):
+            item = QListWidgetItem(f"Interpolated Point {i + 1}: {point.get_real_coordinates()}")
+            self.data_points_list.addItem(item)
+
+    def edit_data_point(self, item):
+        index = self.data_points_list.row(item)
+        total_points = len(self.extraction.get_data_points())
+
+        if index < total_points:
+            point = self.extraction.get_data_points()[index]
+            x, y = point.get_real_coordinates()  # get_real_coordinates should return a tuple of (x, y)
+        else:
+            point = self.interpolation.interpolated_points[index - total_points]
+            x, y = point.get_real_coordinates()  # get_real_coordinates should return a tuple of (x, y)
+
+        if x is None or y is None:
+            return  # If coordinates are None, skip the edit
+
+        new_x, ok = QInputDialog.getDouble(self, "Edit Data Point", "New X Coordinate:", x)
+        if ok:
+            new_y, ok = QInputDialog.getDouble(self, "Edit Data Point", "New Y Coordinate:", y)
+            if ok:
+                new_point = (new_x, new_y)
+                if index < total_points:
+                    self.extraction.edit_data_point(index, QPointF(*new_point))
+                else:
+                    self.interpolation.interpolated_points[index - total_points].set_real_coordinates(new_point)
+                self.show_data_points()
+                self.update_image()
+
+    def delete_data_point(self):
+        items = self.data_points_list.selectedItems()
+        total_points = len(self.extraction.get_data_points())
+
+        if items:
+            for item in items:
+                index = self.data_points_list.row(item)
+                if index < total_points:
+                    self.extraction.delete_data_point(index)
+                else:
+                    self.interpolation.interpolated_points.pop(index - total_points)
+                self.show_data_points()
+                self.update_image()
+
+    def plot_data_points(self):
+        data_points = self.extraction.get_data_points()
+        if not data_points:
+            print("No data points to plot.")
+            return
+
+        x_coords = [point.get_real_coordinates()[0] for point in data_points]
+        y_coords = [point.get_real_coordinates()[1] for point in data_points]
+
+        plt.scatter(x_coords, y_coords, c='blue', label='Data Points')
+
+        if self.interpolation_mode and self.interpolation.interpolated_points:
+            x_interp_coords = [point.get_real_coordinates()[0] for point in self.interpolation.interpolated_points]
+            y_interp_coords = [point.get_real_coordinates()[1] for point in self.interpolation.interpolated_points]
+            plt.scatter(x_interp_coords, y_interp_coords, c='red', label='Interpolated Points')
+
+        plt.xlabel('X Coordinates')
+        plt.ylabel('Y Coordinates')
+        plt.title('Data Points Plot')
+        plt.legend()
+        plt.show()
+
 
 if __name__ == '__main__':
     app = QApplication([])

@@ -1,23 +1,18 @@
-from PyQt5.QtCore import QPointF
-
+# point.py
 
 class Point:
-    def __init__(self, qpoint: QPointF, real_coordinates=None, point_type='data'):
-        self.qpoint = qpoint
-        self.real_coordinates = real_coordinates
-        self.point_type = point_type
-
-    def set_real_coordinates(self, real_coordinates):
+    def __init__(self, image_coordinates, real_coordinates=None):
+        self.image_coordinates = image_coordinates
         self.real_coordinates = real_coordinates
 
     def get_image_coordinates(self):
-        return self.qpoint.x(), self.qpoint.y()
+        return self.image_coordinates
 
     def get_real_coordinates(self):
         return self.real_coordinates
 
-    def is_calibration_point(self):
-        return self.point_type == 'calibration'
+    def set_image_coordinates(self, new_coords):
+        self.image_coordinates = new_coords
 
-    def is_data_point(self):
-        return self.point_type == 'data'
+    def set_real_coordinates(self, new_coords):
+        self.real_coordinates = new_coords

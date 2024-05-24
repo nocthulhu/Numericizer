@@ -1,7 +1,7 @@
-from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QMessageBox
+from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem, QLabel
 from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QFont
 from PyQt5.QtCore import Qt, QPointF
-from PyQt5 import QtGui
+import numpy as np
 
 class ImageView(QGraphicsView):
     def __init__(self, parent=None):
@@ -15,6 +15,12 @@ class ImageView(QGraphicsView):
         self.data_points_graphics = []
         self.interpolated_points_graphics = []
         self.highlighted_point = None
+        self.perspective_points = []
+        self.info_label = QLabel(self)
+        self.info_label.setStyleSheet("QLabel { background-color : white; color : black; }")
+        self.info_label.setFixedWidth(200)
+        self.info_label.setAlignment(Qt.AlignCenter)
+        self.info_label.hide()
 
     def set_image(self, image):
         if len(image.shape) == 3:
@@ -47,18 +53,31 @@ class ImageView(QGraphicsView):
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             scene_pos = self.mapToScene(event.pos())
-            if self.pixmap_item and self.pixmap_item.contains(scene_pos):
+            if self.pixmap_item.contains(scene_pos):
                 if self.main_window.calibration_mode:
                     self.main_window.calibration.add_calibration_point(scene_pos)
                     self.update_scene()  # Update scene to show points
                 elif self.main_window.extraction_mode:
                     self.main_window.extraction.add_data_point(scene_pos)
                     self.update_scene()  # Update scene to show points
-            elif not self.pixmap_item:
-                QMessageBox.warning(self, "No Image Loaded", "Please load an image before adding points.")
+                elif self.main_window.perspective_mode:
+                    self.add_perspective_point(scene_pos)
+                    if len(self.perspective_points) == 4:
+                        self.main_window.correct_perspective(self.perspective_points)
+                        self.perspective_points.clear()
+                        self.info_label.hide()
+                    else:
+                        self.main_window.update_perspective_info()
+                    self.update_scene()
+
+    def add_perspective_point(self, point):
+        ellipse = QGraphicsEllipseItem(point.x() - 5, point.y() - 5, 10, 10)
+        ellipse.setBrush(QBrush(Qt.red))
+        ellipse.setPen(QPen(Qt.red))
+        self.scene.addItem(ellipse)
+        self.perspective_points.append(point)
 
     def draw_calibration_points(self, calibration_points):
-        """Draws calibration points on the image."""
         for point_graphic in self.calibration_points_graphics:
             self.scene.removeItem(point_graphic)
         self.calibration_points_graphics = []
@@ -80,8 +99,7 @@ class ImageView(QGraphicsView):
             self.scene.removeItem(point_graphic)
         self.data_points_graphics = []
         for point in data_points:
-            coords = point.get_image_coordinates()
-            x, y = coords.x(), coords.y()
+            x, y = point.get_image_coordinates()
             point_graphic = self.scene.addEllipse(x - 3, y - 3, 6, 6, QPen(Qt.blue), QBrush(Qt.blue))
             self.data_points_graphics.append(point_graphic)
 
@@ -90,13 +108,11 @@ class ImageView(QGraphicsView):
             self.scene.removeItem(point_graphic)
         self.interpolated_points_graphics = []
         for point in interpolated_points:
-            coords = point.get_image_coordinates()
-            x, y = coords.x(), coords.y()
+            x, y = point.get_image_coordinates()
             point_graphic = self.scene.addEllipse(x - 2, y - 2, 4, 4, QPen(Qt.green), QBrush(Qt.green))
             self.interpolated_points_graphics.append(point_graphic)
 
     def highlight_point(self, point):
-        """Highlights a specific point on the image."""
         self.highlighted_point = point.get_image_coordinates()
         self.update_scene()
 
@@ -105,7 +121,11 @@ class ImageView(QGraphicsView):
         self.update_scene()
 
     def update_scene(self):
-        """Updates the scene to reflect the latest points and highlights."""
         self.draw_calibration_points(self.main_window.calibration.calibration_points)
         self.draw_data_points(self.main_window.extraction.data_points)
         self.draw_interpolated_points(self.main_window.interpolation.interpolated_points)
+
+    def show_info_label(self, text):
+        self.info_label.setText(text)
+        self.info_label.adjustSize()
+        self.info_label.show()

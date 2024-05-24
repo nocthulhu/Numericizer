@@ -49,3 +49,16 @@ class ImageProcessor:
                 print("Unsupported image format for denoising.")
         else:
             print("Load an image first.")
+
+    def correct_perspective(self, pts1, pts2):
+        if self.image is not None:
+            matrix = cv2.getPerspectiveTransform(pts1, pts2)
+            width, height = self.image.shape[1], self.image.shape[0]
+            self.image = cv2.warpPerspective(self.image, matrix, (width, height))
+
+    def rotate_image(self, angle):
+        if self.image is not None:
+            (h, w) = self.image.shape[:2]
+            center = (w // 2, h // 2)
+            matrix = cv2.getRotationMatrix2D(center, angle, 1.0)
+            self.image = cv2.warpAffine(self.image, matrix, (w, h))

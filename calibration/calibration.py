@@ -1,9 +1,10 @@
 import cv2
 import numpy as np
 import random
-from PyQt5.QtCore import QPointF
+from PyQt5.QtCore import QPointF, QTimer
 from point import Point
-from calibration_dialog import CalibrationDialog
+from ui import main_window
+from ui.calibration_dialog import CalibrationDialog
 
 
 class Calibration:
@@ -23,18 +24,24 @@ class Calibration:
             self.calibration_points.append(point_obj)
 
             self.main_window.image_view.highlight_point(point_obj)
-
+            self.main_window.image_view.update_scene()
             dialog = CalibrationDialog(self.main_window)
             dialog.setWindowTitle(f"Enter Real Coordinates for Point {len(self.calibration_points)}")
             if dialog.exec() == CalibrationDialog.Accepted:
                 point_obj.set_real_coordinates(dialog.real_coordinates)
-                self.main_window.image_view.clear_highlight()
+                self.main_window.image_view.delete_highlight(point_obj)
+                self.main_window.image_view.draw_calibration_points(self.calibration_points)
                 if len(self.calibration_points) == 3:
                     self.calculate_transformation_matrix()
             else:
                 self.calibration_points.pop()
-                self.main_window.image_view.clear_highlight()
+                self.main_window.image_view.delete_highlight(point_obj)
 
+
+    def clear_calibration_points(self):
+        """Clears all calibration points."""
+        self.main_window.image_view.clear_calibration_points()
+        self.calibration_points = []
     def calculate_transformation_matrix(self):
         """Calculates the transformation matrix based on calibration points."""
         image_points = np.array(
@@ -107,7 +114,8 @@ class Calibration:
             x, y = corner.ravel()
             if self.is_near_line(x, y, lines) or self.is_near_intersection(x, y, intersections):
                 refined_corners.append(corner)
-                cv2.circle(image, (int(x), int(y)), 3, (0, 255, 0), -1)
+                # QGraphicsEllipseItem
+                self.main_window.image_view.draw_detected_corners(refined_corners)
 
         self.main_window.image_view.set_image(image)
         self.main_window.update_image()
@@ -166,8 +174,8 @@ class Calibration:
         print("Starting automatic calibration...")
         corners = self.advanced_corner_detection(image)
 
-        if len(corners) >= 50:
-            corners = random.sample(corners, 3)  # Take 3 random corners from the first 50
+        if len(corners) >= 10:
+            corners = random.sample(corners, 3)  # Take 3 random corners
             self.calibration_points = []
             for corner in corners:
                 x, y = corner.ravel()
@@ -176,5 +184,6 @@ class Calibration:
             self.calculate_transformation_matrix()
             self.main_window.update_image()
             print("Calibration points set:", self.calibration_points)
+
         else:
             print("Not enough corners detected for calibration.")

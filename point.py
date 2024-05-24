@@ -4,7 +4,7 @@ class Point:
     def __init__(self, image_coordinates, real_coordinates=None, point_type=None):
         self.image_coordinates = image_coordinates
         self.real_coordinates = real_coordinates
-        self.point_type = point_type  # Added parameter
+        self.point_type = point_type
 
     def get_image_coordinates(self):
         """Returns the image coordinates."""

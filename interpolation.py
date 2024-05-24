@@ -3,16 +3,20 @@ import numpy as np
 from point import Point
 
 class Interpolation:
+    """Class to handle interpolation of data points based on calibration."""
+
     def __init__(self, calibration):
         self.calibration = calibration
         self.interpolated_points = []
 
     def interpolate_data(self, data_points):
+        """Interpolates data points if there are more than one point."""
         if len(data_points) > 1:
             self.interpolated_points.clear()
 
-            self.calibration.transform_points(data_points)
-            real_coordinates = [p.get_real_coordinates() for p in data_points]
+            # Transform data points using calibration matrix
+            transformed_points = self.calibration.transform_points(data_points)
+            real_coordinates = [p.get_real_coordinates() for p in transformed_points]
 
             if real_coordinates:
                 sorted_points = sorted(real_coordinates, key=lambda point: point[0])
@@ -31,3 +35,7 @@ class Interpolation:
                 print("Calibration is required before interpolation.")
         else:
             print("Not enough data points for interpolation. Extract at least two points.")
+
+    def get_interpolated_points(self):
+        """Returns the list of interpolated points."""
+        return self.interpolated_points

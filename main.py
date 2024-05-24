@@ -12,6 +12,8 @@ import numpy as np
 import cv2
 
 class MainWindow(QMainWindow):
+    """Main application window class."""
+
     def __init__(self):
         super().__init__()
         self.image_processor = ImageProcessor()
@@ -29,6 +31,7 @@ class MainWindow(QMainWindow):
         self.initUI()
 
     def initUI(self):
+        """Initializes the user interface components."""
         self.setWindowTitle('Numericizer')
         self.setGeometry(100, 100, 1000, 600)
 
@@ -113,6 +116,7 @@ class MainWindow(QMainWindow):
         viewMenu.addAction(plotPointsAction)
 
     def open_image(self):
+        """Opens an image file and displays it."""
         options = QFileDialog.Options()
         file_path, _ = QFileDialog.getOpenFileName(self, "Open Image File", "",
                                                    "Images (*.png *.xpm *.jpg *.jpeg *.bmp);;All Files (*)",
@@ -132,6 +136,7 @@ class MainWindow(QMainWindow):
             self.rotateAction.setEnabled(True)
 
     def correct_perspective(self, points):
+        """Corrects the perspective of the image using four points."""
         if len(points) != 4:
             return
         pts1 = np.float32([[point.x(), point.y()] for point in points])
@@ -141,6 +146,7 @@ class MainWindow(QMainWindow):
         self.update_image()
 
     def toggle_perspective_mode(self):
+        """Toggles the perspective correction mode."""
         self.perspective_mode = not self.perspective_mode
         self.calibration_mode = False
         self.extraction_mode = False
@@ -149,6 +155,7 @@ class MainWindow(QMainWindow):
         self.update_perspective_info()
 
     def update_perspective_info(self):
+        """Updates the informational label for perspective correction."""
         messages = [
             "Please select the top-left corner",
             "Please select the top-right corner",
@@ -161,28 +168,34 @@ class MainWindow(QMainWindow):
             self.image_view.info_label.hide()
 
     def rotate_image(self):
+        """Rotates the image by a specified angle."""
         angle, ok = QInputDialog.getDouble(self, "Rotate Image", "Enter angle (degrees) (clockwise):", 0, -360, 360, 1)
         if ok and self.image_processor.image is not None:
             self.image_processor.rotate_image(angle)
             self.update_image()
 
     def update_image(self):
+        """Updates the displayed image."""
         if self.image_processor.image is not None:
             self.image_view.set_image(self.image_processor.image)
 
     def equalize_histogram(self):
+        """Equalizes the histogram of the image."""
         self.image_processor.equalize_histogram()
         self.update_image()
 
     def edge_detection(self):
+        """Applies edge detection to the image."""
         self.image_processor.edge_detection()
         self.update_image()
 
     def denoise_image(self):
+        """Applies denoising to the image."""
         self.image_processor.denoise_image()
         self.update_image()
 
     def toggle_calibration_mode(self):
+        """Toggles the calibration mode."""
         self.calibration_mode = not self.calibration_mode
         self.extraction_mode = False
         self.interpolation_mode = False
@@ -190,6 +203,7 @@ class MainWindow(QMainWindow):
         self.setCursor(QCursor(Qt.CrossCursor if self.calibration_mode else Qt.ArrowCursor))
 
     def toggle_extraction_mode(self):
+        """Toggles the extraction mode."""
         self.extraction_mode = not self.extraction_mode
         self.calibration_mode = False
         self.interpolation_mode = False
@@ -197,6 +211,7 @@ class MainWindow(QMainWindow):
         self.setCursor(QCursor(Qt.CrossCursor if self.extraction_mode else Qt.ArrowCursor))
 
     def toggle_interpolation_mode(self):
+        """Toggles the interpolation mode."""
         if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 3:
             QMessageBox.warning(self, "Calibration Required",
                                 "Calibration is required before interpolation. Please calibrate at least 3 points.")
@@ -216,6 +231,7 @@ class MainWindow(QMainWindow):
             self.update_image()
 
     def export_data_as_csv(self):
+        """Exports the data points as a CSV file."""
         if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 3:
             QMessageBox.warning(self, "Calibration Required",
                                 "Calibration is required before exporting data points. Please calibrate at least 3 points.")
@@ -234,6 +250,7 @@ class MainWindow(QMainWindow):
                 self.data_exporter.export_to_csv(real_coordinates, filepath)
 
     def export_data_as_json(self):
+        """Exports the data points as a JSON file."""
         if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 3:
             QMessageBox.warning(self, "Calibration Required",
                                 "Calibration is required before exporting data points. Please calibrate at least 3 points.")
@@ -252,6 +269,7 @@ class MainWindow(QMainWindow):
                 self.data_exporter.export_to_json(real_coordinates, filepath)
 
     def automatic_calibration(self):
+        """Performs automatic calibration of the image."""
         if self.image_processor.image is not None:
             print("Running automatic calibration...")
             self.calibration.automatic_calibration(self.image_processor.image)
@@ -259,6 +277,7 @@ class MainWindow(QMainWindow):
             print("Load an image first.")
 
     def show_data_points(self):
+        """Displays the list of data points."""
         self.data_points_list.clear()
         data_points = self.extraction.get_data_points()
         interpolated_points = self.interpolation.interpolated_points if self.interpolation_mode else []
@@ -272,6 +291,7 @@ class MainWindow(QMainWindow):
             self.data_points_list.addItem(item)
 
     def edit_data_point(self, item):
+        """Edits a selected data point."""
         index = self.data_points_list.row(item)
         total_points = len(self.extraction.get_data_points())
 
@@ -298,6 +318,7 @@ class MainWindow(QMainWindow):
                 self.update_image()
 
     def delete_data_point(self):
+        """Deletes a selected data point."""
         items = self.data_points_list.selectedItems()
         total_points = len(self.extraction.get_data_points())
 
@@ -312,6 +333,7 @@ class MainWindow(QMainWindow):
                 self.update_image()
 
     def plot_data_points(self):
+        """Plots the data points using matplotlib."""
         data_points = self.extraction.get_data_points()
         if not data_points:
             print("No data points to plot.")

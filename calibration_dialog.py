@@ -1,12 +1,15 @@
 from PyQt5.QtWidgets import QDialog, QVBoxLayout, QHBoxLayout, QLabel, QLineEdit, QPushButton
 
 class CalibrationDialog(QDialog):
+    """Dialog to input real coordinates for calibration points."""
+
     def __init__(self, parent=None):
         super().__init__(parent)
         self.real_coordinates = None
         self.initUI()
 
     def initUI(self):
+        """Initializes the UI components."""
         self.setWindowTitle("Enter Real Coordinates")
 
         layout = QVBoxLayout()
@@ -35,6 +38,7 @@ class CalibrationDialog(QDialog):
         self.setLayout(layout)
 
     def accept(self):
+        """Accepts the input coordinates and closes the dialog."""
         try:
             x = float(self.x_input.text())
             y = float(self.y_input.text())

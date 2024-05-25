@@ -1,6 +1,6 @@
-from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem, QLabel
-from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QFont
-from PyQt5.QtCore import Qt, QPointF, QRectF
+from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem, QLabel, QInputDialog, QMenu, QRubberBand, QApplication
+from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QFont, QMouseEvent
+from PyQt5.QtCore import Qt, QPointF, QRectF, QRect, QSize
 import numpy as np
 
 class ImageView(QGraphicsView):
@@ -24,6 +24,13 @@ class ImageView(QGraphicsView):
         self.info_label.setFixedWidth(200)
         self.info_label.setAlignment(Qt.AlignCenter)
         self.info_label.hide()
+
+        # Selection tool
+        self.rubber_band = QRubberBand(QRubberBand.Rectangle, self)
+        self.origin = QPointF()
+        self.selection_mode = True  # Default tool
+        self.selected_item = None
+        self.dragging = False
 
     def set_image(self, image):
         """Sets and displays the given image in the view."""
@@ -56,33 +63,79 @@ class ImageView(QGraphicsView):
             self.scale(1.1 ** steps, 1.1 ** steps)
 
     def mousePressEvent(self, event):
-        """Handles mouse click events to add points or perform perspective correction."""
+        """Handles mouse press events to add points or perform perspective correction."""
         if event.button() == Qt.LeftButton:
+            self.origin = event.pos()
+            if self.selection_mode:
+                self.rubber_band.setGeometry(QRect(self.origin, QSize()))
+                self.rubber_band.show()
+            else:
+                scene_pos = self.mapToScene(event.pos())
+                if self.pixmap_item and self.pixmap_item.contains(scene_pos):
+                    if self.main_window.calibration_mode:
+                        self.main_window.calibration.add_calibration_point(scene_pos)
+                        self.update_scene()  # Update scene to show points
+                    elif self.main_window.extraction_mode:
+                        self.main_window.extraction.add_data_point(scene_pos)
+                        self.update_scene()  # Update scene to show points
+                    elif self.main_window.perspective_mode:
+                        self.add_perspective_point(scene_pos)
+                        if len(self.perspective_points) == 4:
+                            self.main_window.correct_perspective(self.perspective_points)
+                            self.perspective_points.clear()
+                            self.info_label.hide()
+                        else:
+                            self.main_window.update_perspective_info()
+                        self.update_scene()
+                    elif self.main_window.feature_detection_mode:
+                        for point in self.main_window.extraction.temp_points:  # Use temp_points instead of detected_points
+                            if point.x() - 3 <= scene_pos.x() <= point.x() + 3 and \
+                                    point.y() - 3 <= scene_pos.y() <= point.y() + 3:
+                                self.main_window.extraction.add_data_point(point)
+                                self.main_window.show_data_points()
+                                self.update_scene()
+                                break
+        elif event.button() == Qt.RightButton:
+            self.origin = event.pos()
             scene_pos = self.mapToScene(event.pos())
-            if self.pixmap_item and self.pixmap_item.contains(scene_pos):
-                if self.main_window.calibration_mode:
-                    self.main_window.calibration.add_calibration_point(scene_pos)
-                    self.update_scene()  # Update scene to show points
-                elif self.main_window.extraction_mode:
-                    self.main_window.extraction.add_data_point(scene_pos)
-                    self.update_scene()  # Update scene to show points
-                elif self.main_window.perspective_mode:
-                    self.add_perspective_point(scene_pos)
-                    if len(self.perspective_points) == 4:
-                        self.main_window.correct_perspective(self.perspective_points)
-                        self.perspective_points.clear()
-                        self.info_label.hide()
-                    else:
-                        self.main_window.update_perspective_info()
-                    self.update_scene()
-                elif self.main_window.feature_detection_mode:
-                    for point in self.main_window.extraction.temp_points:  # Use temp_points instead of detected_points
-                        if point.x() - 3 <= scene_pos.x() <= point.x() + 3 and \
-                                point.y() - 3 <= scene_pos.y() <= point.y() + 3:
-                            self.main_window.extraction.add_data_point(point)
-                            self.main_window.show_data_points()
-                            self.update_scene()
-                            break
+            item = self.scene.itemAt(scene_pos, self.transform())
+            if isinstance(item, QGraphicsEllipseItem):
+                self.selected_item = item
+                self.drag_start_position = event.pos()
+            else:
+                self.selected_item = None
+
+    def mouseMoveEvent(self, event):
+        """Handles mouse move events for the selection tool."""
+        if self.selection_mode and not self.rubber_band.isHidden():
+            self.rubber_band.setGeometry(QRect(self.origin, event.pos()).normalized())
+        elif self.selected_item and (event.pos() - self.drag_start_position).manhattanLength() > QApplication.startDragDistance():
+            self.dragging = True
+            new_pos = self.mapToScene(event.pos())
+            self.selected_item.setPos(new_pos - self.selected_item.boundingRect().center())
+            # Update the corresponding point in the data model
+            for point in self.main_window.extraction.data_points:
+                if point.get_image_coordinates() == self.selected_item.data(0).get_image_coordinates():
+                    point.set_image_coordinates(new_pos)
+            self.update_scene()
+
+    def mouseReleaseEvent(self, event):
+        """Handles mouse release events to finalize selection or dragging."""
+        if self.selection_mode and event.button() == Qt.LeftButton:
+            self.rubber_band.hide()
+            rect = self.rubber_band.geometry()
+            selection_rect = self.mapToScene(rect).boundingRect()
+            selected_items = self.scene.items(selection_rect)
+            for item in selected_items:
+                if isinstance(item, QGraphicsEllipseItem):
+                    item.setBrush(QBrush(Qt.yellow))
+                    point = item.data(0)
+                    if point and point not in self.highlighted_points:
+                        self.highlighted_points.append(point)
+            self.update_scene()
+        elif event.button() == Qt.RightButton:
+            self.selected_item = None
+            self.dragging = False
 
     def add_perspective_point(self, point):
         """Adds a point for perspective correction."""
@@ -129,6 +182,7 @@ class ImageView(QGraphicsView):
             x = point.get_image_coordinates().x()
             y = point.get_image_coordinates().y()
             point_graphic = self.scene.addEllipse(x - 3, y - 3, 6, 6, QPen(Qt.blue), QBrush(Qt.blue))
+            point_graphic.setData(0, point)  # Store the point object in the graphics item
             self.data_points_graphics.append(point_graphic)
 
     def draw_interpolated_points(self, interpolated_points):
@@ -150,8 +204,7 @@ class ImageView(QGraphicsView):
         for point in detected_points:
             x = point.x()
             y = point.y()
-            point_graphic = self.scene.addEllipse(x - 2, y - 2, 4, 4, QPen(Qt.green),
-                                                  QBrush(Qt.green))
+            point_graphic = self.scene.addEllipse(x - 2, y - 2, 4, 4, QPen(Qt.green), QBrush(Qt.green))
             self.detected_points_graphics.append(point_graphic)
 
     def highlight_point(self, point):
@@ -227,3 +280,41 @@ class ImageView(QGraphicsView):
         self.info_label.setText(text)
         self.info_label.adjustSize()
         self.info_label.show()
+
+    def contextMenuEvent(self, event):
+        """Creates a context menu for editing or deleting data points."""
+        scene_pos = self.mapToScene(event.pos())
+        item = self.scene.itemAt(scene_pos, self.transform())
+
+        if isinstance(item, QGraphicsEllipseItem):
+            context_menu = QMenu(self)
+            edit_action = context_menu.addAction("Edit Point")
+            delete_action = context_menu.addAction("Delete Point")
+
+            action = context_menu.exec_(self.mapToGlobal(event.pos()))
+
+            if action == edit_action:
+                self.edit_point(item)
+            elif action == delete_action:
+                self.delete_point(item)
+
+    def edit_point(self, item):
+        """Edits the selected data point."""
+        point = item.data(0)  # Retrieve the point object
+        if point:
+            coords = point.get_image_coordinates()
+            x, ok_x = QInputDialog.getDouble(self, "Edit Point", "X Coordinate:", coords.x(), -10000, 10000, 2)
+            y, ok_y = QInputDialog.getDouble(self, "Edit Point", "Y Coordinate:", coords.y(), -10000, 10000, 2)
+            if ok_x and ok_y:
+                new_coords = QPointF(x, y)
+                item.setRect(x - 3, y - 3, 6, 6)
+                point.set_image_coordinates(new_coords)
+                self.update_scene()
+
+    def delete_point(self, item):
+        """Deletes the selected data point."""
+        point = item.data(0)  # Retrieve the point object
+        if point:
+            self.scene.removeItem(item)
+            self.main_window.extraction.data_points.remove(point)
+            self.update_scene()

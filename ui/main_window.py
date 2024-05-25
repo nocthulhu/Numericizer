@@ -18,7 +18,7 @@ class MainWindow(QMainWindow):
         super().__init__()
         self.image_processor = ImageProcessor()
         self.calibration = Calibration(self)
-        self.extraction = DataExtraction()
+        self.extraction = DataExtraction(self.calibration, self)  # Pass calibration and main_window
         self.interpolation = Interpolation(self.calibration)
         self.data_exporter = DataExporter()
 
@@ -30,7 +30,6 @@ class MainWindow(QMainWindow):
 
         self.original_image = None
         self.initUI()
-
     def initUI(self):
         """Initializes the user interface components."""
         self.setWindowTitle('Numericizer')
@@ -166,6 +165,11 @@ class MainWindow(QMainWindow):
 
     def toggle_extraction_mode(self):
         """Toggles the data extraction mode."""
+        if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 3:
+            QMessageBox.warning(self, "Calibration Required",
+                                "Calibration is required before extraction. Please calibrate at least 3 points.")
+            return
+
         self.image_view.update_scene()
         self.image_view.update()
         self.extraction_mode = not self.extraction_mode
@@ -182,6 +186,7 @@ class MainWindow(QMainWindow):
                 print("Load an image first.")
         else:
             print("Extraction mode disabled.")
+        self.image_view.selection_mode = not self.extraction_mode
 
         self.image_view.update_scene()
         self.image_view.update()
@@ -206,8 +211,13 @@ class MainWindow(QMainWindow):
         self.update_image()
 
     def toggle_feature_detection_mode(self):
-        self.image_view.update_scene()
         """Toggles the advanced feature detection mode."""
+        if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 3:
+            QMessageBox.warning(self, "Calibration Required",
+                                "Calibration is required before feature detection. Please calibrate at least 3 points.")
+            return
+
+        self.image_view.update_scene()
         self.feature_detection_mode = not self.feature_detection_mode
         self.calibration_mode = False
         self.extraction_mode = False
@@ -227,13 +237,14 @@ class MainWindow(QMainWindow):
             self.extraction.clear_temp_points()
             self.image_view.clear_detected_points()
             self.image_view.update_scene()
+        self.image_view.selection_mode = not self.feature_detection_mode
 
     def mousePressEvent(self, event):
         """Handles mouse press events to select data points."""
         if event.button() == Qt.LeftButton and self.feature_detection_mode:
             pos = event.pos()
             scene_pos = self.image_view.mapToScene(pos)
-            items = self.image_view.items(scene_pos)
+            items = self.image_view.items(scene_pos.toPoint())  # Use toPoint() to match expected argument type
             for item in items:
                 if isinstance(item, QGraphicsEllipseItem):
                     point = item.data(0)
@@ -253,6 +264,7 @@ class MainWindow(QMainWindow):
         self.feature_detection_mode = False
         self.setCursor(QCursor(Qt.CrossCursor if self.perspective_mode else Qt.ArrowCursor))
         self.update_perspective_info()
+        self.image_view.selection_mode = not self.perspective_mode
 
     def update_perspective_info(self):
         """Updates the informational label for perspective correction."""
@@ -302,15 +314,7 @@ class MainWindow(QMainWindow):
         self.perspective_mode = False
         self.feature_detection_mode = False
         self.setCursor(QCursor(Qt.CrossCursor if self.calibration_mode else Qt.ArrowCursor))
-
-    def toggle_extraction_mode(self):
-        """Toggles the extraction mode."""
-        self.extraction_mode = not self.extraction_mode
-        self.calibration_mode = False
-        self.interpolation_mode = False
-        self.perspective_mode = False
-        self.feature_detection_mode = False
-        self.setCursor(QCursor(Qt.CrossCursor if self.extraction_mode else Qt.ArrowCursor))
+        self.image_view.selection_mode = not self.calibration_mode
 
     def toggle_interpolation_mode(self):
         """Toggles the interpolation mode."""
@@ -326,12 +330,18 @@ class MainWindow(QMainWindow):
         self.perspective_mode = False
 
         if self.interpolation_mode:
-            self.interpolation.calibration = self.calibration
-            print("Interpolation mode activated.")
-            print("Data points:", self.extraction.data_points)
-            self.interpolation.interpolate_data(self.extraction.data_points)
-            self.show_data_points()
-            self.update_image()
+            if len(self.extraction.data_points) >= 2:
+                self.interpolation.calibration = self.calibration
+                print("Interpolation mode activated.")
+                print("Data points:", self.extraction.get_data_points())
+                self.interpolation.interpolate_data(self.extraction.get_data_points())
+                self.show_data_points()
+                self.update_image()
+            else:
+                QMessageBox.warning(self, "Insufficient Data Points",
+                                    "At least 2 data points are required for interpolation.")
+                self.interpolation_mode = False
+        self.image_view.selection_mode = not self.interpolation_mode
 
     def export_data_as_csv(self):
         """Exports the data points as a CSV file."""
@@ -394,32 +404,15 @@ class MainWindow(QMainWindow):
             item = QListWidgetItem(f"Interpolated Point {i + 1}: {point.get_real_coordinates()}")
             self.data_points_list.addItem(item)
 
-    def edit_data_point(self, item):
-        """Edits a selected data point."""
-        index = self.data_points_list.row(item)
-        total_points = len(self.extraction.get_data_points())
-
-        if index < total_points:
-            point = self.extraction.get_data_points()[index]
-            x, y = point.get_real_coordinates()
-        else:
-            point = self.interpolation.interpolated_points[index - total_points]
-            x, y = point.get_real_coordinates()
-
-        if x is None or y is None:
-            return
-
-        new_x, ok = QInputDialog.getDouble(self, "Edit Data Point", "New X Coordinate:", x)
-        if ok:
-            new_y, ok = QInputDialog.getDouble(self, "Edit Data Point", "New Y Coordinate:", y)
-            if ok:
-                new_point = (new_x, new_y)
-                if index < total_points:
-                    self.extraction.edit_data_point(index, QPointF(*new_point))
-                else:
-                    self.interpolation.interpolated_points[index - total_points].set_real_coordinates(new_point)
-                self.show_data_points()
-                self.update_image()
+    def edit_data_point(self, index, new_coords):
+        """Edits a data point at the given index with new coordinates."""
+        point = self.extraction.data_points[index]
+        real_coords = point.get_real_coordinates()
+        x, y = real_coords.x(), real_coords.y()
+        self.extraction.data_points[index].set_image_coordinates(new_coords)
+        self.extraction.data_points[index].set_real_coordinates(self.calibration.image_to_real_coordinates(new_coords))
+        self.image_view.update_scene()
+        self.show_data_points()
 
     def delete_data_point(self):
         """Deletes a selected data point."""
@@ -444,16 +437,16 @@ class MainWindow(QMainWindow):
             return
 
         valid_data_points = [point for point in data_points if point.get_real_coordinates() is not None]
-        x_coords = [point.get_real_coordinates()[0] for point in valid_data_points]
-        y_coords = [point.get_real_coordinates()[1] for point in valid_data_points]
+        x_coords = [point.get_real_coordinates().x() for point in valid_data_points]
+        y_coords = [point.get_real_coordinates().y() for point in valid_data_points]
 
         plt.scatter(x_coords, y_coords, c='blue', label='Data Points')
 
         if self.interpolation_mode and self.interpolation.interpolated_points:
             valid_interpolated_points = [point for point in self.interpolation.interpolated_points if
                                          point.get_real_coordinates() is not None]
-            x_interp_coords = [point.get_real_coordinates()[0] for point in valid_interpolated_points]
-            y_interp_coords = [point.get_real_coordinates()[1] for point in valid_interpolated_points]
+            x_interp_coords = [point.get_real_coordinates().x() for point in valid_interpolated_points]
+            y_interp_coords = [point.get_real_coordinates().y() for point in valid_interpolated_points]
             plt.scatter(x_interp_coords, y_interp_coords, c='red', label='Interpolated Points')
 
         plt.xlabel('X Coordinates')

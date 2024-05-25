@@ -4,30 +4,42 @@ from point import Point
 import numpy as np
 
 class DataExtraction:
-    def __init__(self):
+    def __init__(self, calibration, main_window):
         self.data_points = []  # List of Point objects
         self.temp_points = []  # Temporary list of points found during automatic extraction
+        self.calibration = calibration
+        self.main_window = main_window
 
 
-    def add_data_point(self, point: QPointF):
-        """Adds a data point."""
-        point_obj = Point(point, point_type='data')
-        self.data_points.append(point_obj)
-
+    def add_data_point(self, scene_pos):
+        """Adds a data point at the given scene position."""
+        real_coordinates = self.calibration.image_to_real_coordinates(scene_pos)
+        point = Point(scene_pos, real_coordinates)
+        self.data_points.append(point)
+        self.main_window.image_view.draw_data_points(self.data_points)
+        self.main_window.show_data_points()
     def delete_data_point(self, index):
         """Deletes a data point at the given index."""
         if 0 <= index < len(self.data_points):
             del self.data_points[index]
 
-    def edit_data_point(self, index, new_point: QPointF):
-        """Edits the data point at the given index with a new point."""
-        if 0 <= index < len(self.data_points):
-            self.data_points[index].set_image_coordinates(new_point)
+
+    def edit_data_point(self, index, new_coords):
+        """Edits a data point at the given index with new coordinates."""
+        self.data_points[index].set_image_coordinates(new_coords)
+        self.data_points[index].set_real_coordinates(self.calibration.image_to_real_coordinates(new_coords))
+        self.main_window.image_view.update_scene()
+        self.main_window.show_data_points()
+
+    def delete_data_point(self, index):
+        """Deletes a data point at the given index."""
+        del self.data_points[index]
+        self.main_window.image_view.update_scene()
+        self.main_window.show_data_points()
 
     def get_data_points(self):
         """Returns the list of data points."""
         return self.data_points
-
     def add_detected_point(self, point: QPointF):
         """Adds a detected point for visualization."""
         point_obj = Point(point, point_type='detected')

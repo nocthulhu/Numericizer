@@ -1,7 +1,7 @@
 from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, QFileDialog, QListWidget, QListWidgetItem, QInputDialog, QMessageBox, QToolTip
 from PyQt5.QtGui import QCursor, QFont
 from PyQt5.QtCore import Qt, QPointF
-from .image_view import ImageView
+from ui.image_view import ImageView
 from image_processing import ImageProcessor
 from calibration import Calibration
 from data_extraction import DataExtraction
@@ -10,7 +10,6 @@ from export import DataExporter
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
-
 
 class MainWindow(QMainWindow):
     """Main application window class."""
@@ -144,7 +143,6 @@ class MainWindow(QMainWindow):
         data_points_list.itemDoubleClicked.connect(self.edit_data_point)
         return data_points_list
 
-
     def open_image(self):
         """Opens an image file and displays it."""
         options = QFileDialog.Options()
@@ -185,11 +183,9 @@ class MainWindow(QMainWindow):
         else:
             print("Extraction mode disabled.")
 
-
-
-
         self.image_view.update_scene()
         self.image_view.update()
+
     def advanced_feature_detection(self):
         """Performs advanced feature detection on the image."""
         if self.image_processor.image is not None:
@@ -198,6 +194,7 @@ class MainWindow(QMainWindow):
             self.image_view.set_image(result_image)
         else:
             print("Load an image first.")
+
     def correct_perspective(self, points):
         """Corrects the perspective of the image using four points."""
         if len(points) != 4:
@@ -245,6 +242,7 @@ class MainWindow(QMainWindow):
                         self.show_data_points()
                         self.update_image()
                         break
+
     def toggle_perspective_mode(self):
         self.image_view.update_scene()
         """Toggles the perspective correction mode."""
@@ -373,6 +371,7 @@ class MainWindow(QMainWindow):
             if filepath:
                 self.data_exporter.export_to_json(real_coordinates, filepath)
 
+    # Automatic calibration handler in main_window.py
     def automatic_calibration(self):
         """Performs automatic calibration of the image."""
         if self.image_processor.image is not None:
@@ -462,9 +461,3 @@ class MainWindow(QMainWindow):
         plt.title('Data Points Plot')
         plt.legend()
         plt.show()
-
-if __name__ == '__main__':
-    app = QApplication([])
-    window = MainWindow()
-    window.show()
-    app.exec_()

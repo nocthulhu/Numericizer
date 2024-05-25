@@ -1,11 +1,10 @@
 import cv2
 import numpy as np
 import random
-from PyQt5.QtCore import QPointF, QTimer
+from PyQt5.QtCore import QPointF
+from PyQt5.QtWidgets import QDialog
 from point import Point
-from ui import main_window
 from ui.calibration_dialog import CalibrationDialog
-
 
 class Calibration:
     """Class to manage calibration of images to real-world coordinates."""
@@ -16,8 +15,10 @@ class Calibration:
         self.transformation_matrix = None
         self.inverse_transformation_matrix = None
         self.calibration_done = False
+        self.automatic_calibration_mode = False
+        self.calibration_cancelled = False  # Track if calibration is cancelled
 
-    def add_calibration_point(self, point: QPointF):
+    def add_calibration_point(self, point: QPointF, automatic=False):
         """Adds a calibration point and triggers dialog for real coordinates input."""
         if len(self.calibration_points) < 3:
             point_obj = Point(point, point_type='calibration')
@@ -25,23 +26,33 @@ class Calibration:
 
             self.main_window.image_view.highlight_point(point_obj)
             self.main_window.image_view.update_scene()
-            dialog = CalibrationDialog(self.main_window)
+            dialog = CalibrationDialog(self.main_window, automatic_calibration=automatic)
             dialog.setWindowTitle(f"Enter Real Coordinates for Point {len(self.calibration_points)}")
-            if dialog.exec() == CalibrationDialog.Accepted:
+            result = dialog.exec()
+            if result == QDialog.Accepted:
                 point_obj.set_real_coordinates(dialog.real_coordinates)
                 self.main_window.image_view.delete_highlight(point_obj)
                 self.main_window.image_view.draw_calibration_points(self.calibration_points)
                 if len(self.calibration_points) == 3:
                     self.calculate_transformation_matrix()
+            elif result == 1000:  # Next point
+                self.calibration_points.pop()
+                self.main_window.image_view.delete_highlight(point_obj)
+                new_point = self.select_random_point()
+                if new_point is not None and not self.calibration_cancelled:
+                    self.add_calibration_point(new_point, automatic=True)
             else:
                 self.calibration_points.pop()
                 self.main_window.image_view.delete_highlight(point_obj)
-
+                if automatic:
+                    self.calibration_cancelled = True  # Mark calibration as cancelled
+                    self.clear_calibration_points()
 
     def clear_calibration_points(self):
         """Clears all calibration points."""
         self.main_window.image_view.clear_calibration_points()
         self.calibration_points = []
+
     def calculate_transformation_matrix(self):
         """Calculates the transformation matrix based on calibration points."""
         image_points = np.array(
@@ -113,8 +124,7 @@ class Calibration:
         for corner in corners:
             x, y = corner.ravel()
             if self.is_near_line(x, y, lines) or self.is_near_intersection(x, y, intersections):
-                refined_corners.append(corner)
-                # QGraphicsEllipseItem
+                refined_corners.append(QPointF(x, y))
                 self.main_window.image_view.draw_detected_corners(refined_corners)
 
         self.main_window.image_view.set_image(image)
@@ -137,7 +147,7 @@ class Calibration:
         line_mag = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
         if line_mag < 1e-10:
             return np.sqrt((px - x1) ** 2 + (py - y1) ** 2)
-        u = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / line_mag ** 2
+        u = ((px - x1) * (x2 - x1) + (py - y1)) / line_mag ** 2
         if u < 0 or u > 1:
             ix = min(max(x1, x2), max(px, px))
             iy = min(max(y1, y2), max(py, py))
@@ -172,18 +182,27 @@ class Calibration:
     def automatic_calibration(self, image):
         """Automatically calibrates the image using enhanced corner detection."""
         print("Starting automatic calibration...")
+        self.automatic_calibration_mode = True
+        self.calibration_cancelled = False  # Reset cancellation flag
         corners = self.advanced_corner_detection(image)
 
         if len(corners) >= 10:
             corners = random.sample(corners, 3)  # Take 3 random corners
             self.calibration_points = []
             for corner in corners:
-                x, y = corner.ravel()
-                point = QPointF(x, y)
-                self.add_calibration_point(point)
-            self.calculate_transformation_matrix()
-            self.main_window.update_image()
-            print("Calibration points set:", self.calibration_points)
-
+                if not self.calibration_cancelled:
+                    self.add_calibration_point(corner, automatic=True)
+            if len(self.calibration_points) == 3:
+                self.calculate_transformation_matrix()
+            else:
+                self.clear_calibration_points()
         else:
             print("Not enough corners detected for calibration.")
+        self.automatic_calibration_mode = False
+
+    def select_random_point(self):
+        """Selects a random point from detected corners for automatic calibration."""
+        corners = self.advanced_corner_detection(self.main_window.image_processor.image)
+        if corners:
+            return random.choice(corners)
+        return None

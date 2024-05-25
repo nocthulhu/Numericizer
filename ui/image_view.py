@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem, QLabel
-from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QFont, QColor
+from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QFont
 from PyQt5.QtCore import Qt, QPointF, QRectF
 import numpy as np
 
@@ -83,6 +83,7 @@ class ImageView(QGraphicsView):
                             self.main_window.show_data_points()
                             self.update_scene()
                             break
+
     def add_perspective_point(self, point):
         """Adds a point for perspective correction."""
         ellipse = QGraphicsEllipseItem(point.x() - 5, point.y() - 5, 10, 10)
@@ -107,18 +108,18 @@ class ImageView(QGraphicsView):
             self.calibration_points_graphics.append(point_graphic)
             self.calibration_points_graphics.append(text)
 
-
-
     def draw_detected_corners(self, corners):
         """Draws detected corners on the image."""
         for point_graphic in self.detected_points_graphics:
             self.scene.removeItem(point_graphic)
         self.detected_points_graphics = []
         for corner in corners:
-            x, y = corner.ravel()
+            x = corner.x()
+            y = corner.y()
             point_graphic = self.scene.addEllipse(x - 1.5, y - 1.5, 3, 3, QPen(Qt.green), QBrush(Qt.green))
             self.detected_points_graphics.append(point_graphic)
         self.update()
+
     def draw_data_points(self, data_points):
         """Draws data points on the image."""
         for point_graphic in self.data_points_graphics:
@@ -198,9 +199,9 @@ class ImageView(QGraphicsView):
         for point_graphic in self.calibration_points_graphics:
             self.scene.removeItem(point_graphic)
         self.calibration_points_graphics = []
-        for point, _ in self.highlighted_points:
-            self.delete_highlight(point)
+        self.clear_highlights()
         self.update()
+
     def clear_detected_points(self):
         """Clears all detected points from the scene."""
         for point_graphic in self.detected_points_graphics:
@@ -220,6 +221,7 @@ class ImageView(QGraphicsView):
         self.draw_interpolated_points(self.main_window.interpolation.interpolated_points)
 
         self.fitInView(self.sceneRect(), Qt.KeepAspectRatio)
+
     def show_info_label(self, text):
         """Displays an informational label."""
         self.info_label.setText(text)

@@ -6,7 +6,6 @@ from PyQt5.QtWidgets import QDialog
 from point import Point
 from ui.calibration_dialog import CalibrationDialog
 
-
 class Calibration:
     """Class to manage calibration of images to real-world coordinates."""
 
@@ -73,8 +72,6 @@ class Calibration:
         self.calibration_done = True
         self.main_window.interpolationAction.setEnabled(True)
 
-
-
     def transform_points(self, data_points):
         """Transforms data points using the calibration matrix."""
         if not self.calibration_done:
@@ -95,6 +92,7 @@ class Calibration:
         real_coords = np.array([[x, y]], dtype=np.float32).reshape(-1, 1, 2)
         img_coords = cv2.perspectiveTransform(real_coords, self.inverse_transformation_matrix)
         return QPointF(img_coords[0][0][0], img_coords[0][0][1])
+
     def image_to_real_coordinates(self, point):
         """Transforms image coordinates to real-world coordinates using the calibration matrix."""
         if not self.calibration_done:

@@ -2,6 +2,7 @@ import numpy as np
 from scipy.interpolate import interp1d
 from point import Point
 
+
 class Interpolation:
     """Class to handle interpolation of data points."""
 
@@ -23,14 +24,24 @@ class Interpolation:
         if len(x) < 2 or len(y) < 2:
             raise ValueError("Not enough valid real coordinates for interpolation.")
 
-        x_min, x_max = min(x), max(x)
-        y_min, y_max = min(y), max(y)
+        self.interpolated_points = []
 
-        num_points = len(data_points) * 40
-        x_new = np.linspace(x_min, x_max, num_points)
-        y_new = np.interp(x_new, x, y)
+        # Interpolate between each pair of points
+        for i in range(len(data_points) - 1):
+            x1, y1 = x[i], y[i]
+            x2, y2 = x[i + 1], y[i + 1]
 
-        self.interpolated_points = [Point(self.calibration.inverse_transform_point(x, y), point_type='interpolated') for x, y in zip(x_new, y_new)]
+            # Calculate the number of interpolated points between each pair
+            num_points_between = max(30, int(np.hypot(x2 - x1, y2 - y1)))  # At least 10 points between each pair
+
+            x_new = np.linspace(x1, x2, num_points_between)
+            y_new = np.interp(x_new, [x1, x2], [y1, y2])
+
+            # Append interpolated points
+            for xi, yi in zip(x_new, y_new):
+                interpolated_point = Point(self.calibration.inverse_transform_point(xi, yi), point_type='interpolated')
+                self.interpolated_points.append(interpolated_point)
+
         self.main_window.image_view.draw_interpolated_points(self.interpolated_points)
 
     def clear_interpolated_points(self):

@@ -150,7 +150,7 @@ class ImageView(QGraphicsView):
             if isinstance(point, Point):  # Ensure we are working with Point objects
                 self.delete_highlight(point)
         self.selected_items = []
-        self.update_scene()
+        self.update()
     def add_perspective_point(self, point):
         """Adds a point for perspective correction."""
         ellipse = QGraphicsEllipseItem(point.x() - 5, point.y() - 5, 10, 10)
@@ -158,7 +158,7 @@ class ImageView(QGraphicsView):
         ellipse.setPen(QPen(Qt.red))
         self.scene.addItem(ellipse)
         self.perspective_points.append(point)
-
+        self.update()
     def draw_calibration_points(self, calibration_points):
         """Draws calibration points on the image."""
         for point_graphic in self.calibration_points_graphics:
@@ -174,7 +174,7 @@ class ImageView(QGraphicsView):
             text.setDefaultTextColor(Qt.red)
             self.calibration_points_graphics.append(point_graphic)
             self.calibration_points_graphics.append(text)
-
+        self.update()
     def draw_detected_corners(self, corners):
         """Draws detected corners on the image."""
         for point_graphic in self.detected_points_graphics:
@@ -198,15 +198,19 @@ class ImageView(QGraphicsView):
             point_graphic = self.scene.addEllipse(x - 3, y - 3, 6, 6, QPen(Qt.blue), QBrush(Qt.blue))
             point_graphic.setData(0, point)
             self.data_points_graphics.append(point_graphic)
+        self.update()
 
     def draw_interpolated_points(self, points):
         """Draws interpolated points on the image."""
         pen = QPen(Qt.green, 4)
         for point in points:
-            ellipse = self.scene.addEllipse(point.get_image_coordinates().x() - 2,
-                                            point.get_image_coordinates().y() - 2,
+            real_coords = point.get_real_coordinates()
+            image_coords = self.parent().calibration.inverse_transform_point(real_coords.x(), real_coords.y())
+            ellipse = self.scene.addEllipse(image_coords.x() - 2,
+                                            image_coords.y() - 2,
                                             4, 4, pen)
             ellipse.setData(0, point)
+        self.update()
     def draw_confidence_intervals(self, x_new, lower_bound, upper_bound):
         """Draws confidence intervals for the interpolated points."""
         pen = QPen(QColor(255, 0, 0, 127), 2, Qt.SolidLine)
@@ -216,14 +220,15 @@ class ImageView(QGraphicsView):
             line = QGraphicsLineItem(low_point.x(), low_point.y(), high_point.x(), high_point.y())
             line.setPen(pen)
             self.scene.addItem(line)
-
+        self.update()
     def clear_interpolated_points(self):
         """Clears interpolated points from the image."""
         for item in self.scene.items():
-            if isinstance(item, QGraphicsEllipseItem) and item.pen().color() == Qt.red:
+            if isinstance(item, QGraphicsEllipseItem) and item.pen().color() == Qt.green:
                 self.scene.removeItem(item)
             if isinstance(item, QGraphicsLineItem) and item.pen().color() == QColor(255, 0, 0, 127):
                 self.scene.removeItem(item)
+        self.update()
     def draw_detected_points(self, detected_points):
         """Draws detected points on the image."""
         for point_graphic in self.detected_points_graphics:
@@ -253,7 +258,7 @@ class ImageView(QGraphicsView):
             ellipse.setBrush(QBrush(Qt.yellow))
             ellipse.setPen(QPen(Qt.yellow))
             self.scene.addItem(ellipse)
-
+        self.update()
     def delete_highlight(self, point):
         """Deletes a specific highlight from the image."""
         new_highlighted_points = []
@@ -340,3 +345,10 @@ class ImageView(QGraphicsView):
             self.main_window.extraction.data_points.remove(point)
             self.main_window.image_view.delete_highlight(point)  # Ensure highlight is removed
             self.update_scene()
+        self.update()
+
+    def reset_view(self):
+        """Resets the view to the original state (centered and zoom reset)."""
+        self.resetTransform()
+        self.fitInView(self.pixmap_item, Qt.KeepAspectRatio)
+        self.zoom_factor = 1

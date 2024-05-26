@@ -157,18 +157,35 @@ class MainWindow(QMainWindow):
         plotPointsAction.setToolTip('Plot the extracted data points')
         plotPointsAction.triggered.connect(self.plot_data_points)
         viewMenu.addAction(plotPointsAction)
+        resetViewAction = QAction('Reset View', self)
+        resetViewAction.triggered.connect(self.reset_view)
+        viewMenu.addAction(resetViewAction)
 
-        # Interpolation method menu
-        interpolationMenu = menubar.addMenu('Interpolation Method')
+        # Interpolation method
+        interpolationMenu = self.menuBar().addMenu('Interpolation Method')
         linearAction = QAction('Linear', self)
         splineAction = QAction('Spline', self)
+        polynomialAction = QAction('Polynomial', self)
+        akimaAction = QAction('Akima', self)
+        pchipAction = QAction('Pchip', self)
+        quadraticAction = QAction('Quadratic', self)
+        piecewiseLinearAction = QAction('Piecewise Linear', self)
 
         linearAction.triggered.connect(lambda: self.set_interpolation_method('linear'))
         splineAction.triggered.connect(lambda: self.set_interpolation_method('spline'))
+        polynomialAction.triggered.connect(lambda: self.set_interpolation_method('polynomial'))
+        akimaAction.triggered.connect(lambda: self.set_interpolation_method('akima'))
+        pchipAction.triggered.connect(lambda: self.set_interpolation_method('pchip'))
+        quadraticAction.triggered.connect(lambda: self.set_interpolation_method('quadratic'))
+        piecewiseLinearAction.triggered.connect(lambda: self.set_interpolation_method('piecewise_linear'))
 
         interpolationMenu.addAction(linearAction)
         interpolationMenu.addAction(splineAction)
-
+        interpolationMenu.addAction(polynomialAction)
+        interpolationMenu.addAction(akimaAction)
+        interpolationMenu.addAction(pchipAction)
+        interpolationMenu.addAction(quadraticAction)
+        interpolationMenu.addAction(piecewiseLinearAction)
     def set_interpolation_method(self, method):
         """Sets the interpolation method in the Interpolation class."""
         try:
@@ -397,7 +414,16 @@ class MainWindow(QMainWindow):
                 self.interpolation.calibration = self.calibration
                 print("Interpolation mode activated.")
                 print("Data points:", self.extraction.get_data_points())
-                self.interpolation.interpolate_data(self.extraction.get_data_points())
+                if self.interpolation.method == 'linear':
+                    interpolated_points = self.interpolation.interpolate_data(self.extraction.get_data_points())
+                    self.image_view.draw_interpolated_points(interpolated_points)
+                elif self.interpolation.method == 'spline':
+                    interpolated_points, x_new, lower_bound, upper_bound = self.interpolation.interpolate_data(self.extraction.get_data_points())
+                    self.image_view.draw_interpolated_points(interpolated_points)
+                    self.image_view.draw_confidence_intervals(x_new, lower_bound, upper_bound)
+                elif self.interpolation.method in ['polynomial', 'akima', 'pchip', 'quadratic', 'piecewise_linear']:
+                    interpolated_points = self.interpolation.interpolate_data(self.extraction.get_data_points())
+                    self.image_view.draw_interpolated_points(interpolated_points)
                 self.show_data_points()
                 self.update_image()
             else:
@@ -407,6 +433,7 @@ class MainWindow(QMainWindow):
         else:
             self.interpolation.clear_interpolated_points()
         self.image_view.selection_mode = not self.interpolation_mode
+
 
     def export_data_as_csv(self):
         """Exports the data points as a CSV file."""
@@ -542,7 +569,9 @@ class MainWindow(QMainWindow):
         """Saves the current state for undo functionality."""
         self.undo_stack.append((action, item, point))
         self.redo_stack.clear()  # Clear the redo stack on new action
-
+    def reset_view(self):
+        """Resets the view by centering and resetting zoom."""
+        self.image_view.reset_view()
     def undo(self):
         """Undo the last action."""
         if not self.undo_stack:

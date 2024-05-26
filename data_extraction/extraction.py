@@ -60,4 +60,5 @@ class DataExtraction:
                     point = QPointF(cX, cY)
                     self.temp_points.append(point)
 
+        self.main_window.image_view.draw_detected_points(self.temp_points)
         return image

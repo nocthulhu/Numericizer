@@ -1,9 +1,8 @@
-from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, QFileDialog, QListWidget, QListWidgetItem, QInputDialog, \
-    QMessageBox, QToolTip
-from PyQt5.QtGui import QCursor, QFont
+from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, QFileDialog, QListWidget, QListWidgetItem, QInputDialog, QMessageBox, QToolTip
+from PyQt5.QtGui import QCursor, QFont, QPen
 from PyQt5.QtCore import Qt, QPointF
 from ui.image_view import ImageView
-from image_processing import ImageProcessor  # Adjust this import if needed
+from image_processing import ImageProcessor
 from calibration import Calibration
 from data_extraction import DataExtraction
 from interpolation import Interpolation
@@ -159,6 +158,25 @@ class MainWindow(QMainWindow):
         plotPointsAction.triggered.connect(self.plot_data_points)
         viewMenu.addAction(plotPointsAction)
 
+        # Interpolation method menu
+        interpolationMenu = menubar.addMenu('Interpolation Method')
+        linearAction = QAction('Linear', self)
+        splineAction = QAction('Spline', self)
+
+        linearAction.triggered.connect(lambda: self.set_interpolation_method('linear'))
+        splineAction.triggered.connect(lambda: self.set_interpolation_method('spline'))
+
+        interpolationMenu.addAction(linearAction)
+        interpolationMenu.addAction(splineAction)
+
+    def set_interpolation_method(self, method):
+        """Sets the interpolation method in the Interpolation class."""
+        try:
+            self.interpolation.set_method(method)
+            QMessageBox.information(self, "Interpolation Method", f"Interpolation method set to {method}.")
+        except ValueError as e:
+            QMessageBox.warning(self, "Error", str(e))
+
     def init_data_points_list(self):
         data_points_list = QListWidget(self)
         data_points_list.setGeometry(800, 50, 200, 500)
@@ -274,6 +292,17 @@ class MainWindow(QMainWindow):
             self.interpolation.clear_interpolated_points()  # Ensure interpolated points are cleared
         self.image_view.selection_mode = not self.feature_detection_mode
 
+    def draw_confidence_intervals(self, x_new, lower_bound, upper_bound):
+        """Draws confidence intervals for the interpolated points."""
+        for x, y_low, y_high in zip(x_new, lower_bound, upper_bound):
+            low_point = self.calibration.inverse_transform_point(x, y_low)
+            high_point = self.calibration.inverse_transform_point(x, y_high)
+            self.image_view.scene.addLine(low_point.x(), low_point.y(), high_point.x(), high_point.y(),
+                                          QPen(Qt.red, 0.5))
+
+    def show_error_metric(self, rmse):
+        """Displays the RMSE of the interpolation."""
+        QMessageBox.information(self, "Interpolation Error", f"Root Mean Squared Error (RMSE): {rmse:.2f}")
     def mousePressEvent(self, event):
         """Handles mouse press events to select data points."""
         if event.button() == Qt.LeftButton and self.feature_detection_mode:
@@ -357,7 +386,6 @@ class MainWindow(QMainWindow):
             QMessageBox.warning(self, "Calibration Required",
                                 "Calibration is required before interpolation. Please calibrate at least 4 points.")
             return
-
         self.interpolation_mode = not self.interpolation_mode
         self.calibration_mode = False
         self.extraction_mode = False

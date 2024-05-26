@@ -1,11 +1,10 @@
 import cv2
 import numpy as np
-import random
 from PyQt5.QtCore import QPointF
 from PyQt5.QtWidgets import QDialog
 from point import Point
 from ui.calibration_dialog import CalibrationDialog
-
+import random
 class Calibration:
     """Class to manage calibration of images to real-world coordinates."""
 
@@ -34,8 +33,9 @@ class Calibration:
                 point_obj.set_real_coordinates(QPointF(real_x, real_y))
                 self.main_window.image_view.delete_highlight(point_obj)
                 self.main_window.image_view.draw_calibration_points(self.calibration_points)
-                if len(self.calibration_points) == 4:  # Calculate transformation matrix after 4 points are selected
+                if len(self.calibration_points) == 4:  # Calculate and refine transformation matrix after 4 points are selected
                     self.calculate_transformation_matrix()
+                    self.refine_calibration()
             elif result == 1000:  # Next point
                 self.calibration_points.pop()
                 self.main_window.image_view.delete_highlight(point_obj)
@@ -72,8 +72,24 @@ class Calibration:
         self.calibration_done = True
         self.main_window.interpolationAction.setEnabled(True)
 
+    def refine_calibration(self, iterations=500, termination_eps=1e-6):
+        """Refines the calibration matrix using iterative optimization."""
+        if len(self.calibration_points) != 4:
+            raise ValueError("Exactly 4 calibration points are required to refine the calibration matrix.")
 
+        image_points = np.array(
+            [[p.get_image_coordinates().x(), p.get_image_coordinates().y()] for p in self.calibration_points],
+            dtype=np.float32)
+        real_coords = np.array(
+            [[p.get_real_coordinates().x(), p.get_real_coordinates().y()] for p in self.calibration_points],
+            dtype=np.float32)
 
+        # Use cv2.findHomography with RANSAC to refine the transformation matrix
+        self.transformation_matrix, _ = cv2.findHomography(image_points, real_coords, method=cv2.RANSAC, ransacReprojThreshold=5.0, maxIters=iterations, confidence=0.99)
+        self.inverse_transformation_matrix = np.linalg.inv(self.transformation_matrix)
+
+        self.calibration_done = True
+        self.main_window.interpolationAction.setEnabled(True)
 
     def transform_points(self, data_points):
         """Transforms data points using the calibration matrix."""
@@ -98,7 +114,6 @@ class Calibration:
         real_coords = np.array([[x, y]], dtype=np.float32).reshape(-1, 1, 2)
         img_coords = cv2.perspectiveTransform(real_coords, self.inverse_transformation_matrix)
 
-
         return QPointF(img_coords[0][0][0], img_coords[0][0][1])
 
     def image_to_real_coordinates(self, point):
@@ -110,6 +125,24 @@ class Calibration:
         real_coords = cv2.perspectiveTransform(img_coords, self.transformation_matrix)
         return QPointF(real_coords[0][0][0], real_coords[0][0][1])
 
+    def refine_calibration(self, iterations=500, termination_eps=1e-6):
+        """Refines the calibration matrix using iterative optimization."""
+        if len(self.calibration_points) != 4:
+            raise ValueError("Exactly 4 calibration points are required to refine the calibration matrix.")
+
+        image_points = np.array(
+            [[p.get_image_coordinates().x(), p.get_image_coordinates().y()] for p in self.calibration_points],
+            dtype=np.float32)
+        real_coords = np.array(
+            [[p.get_real_coordinates().x(), p.get_real_coordinates().y()] for p in self.calibration_points],
+            dtype=np.float32)
+
+        # Use cv2.findHomography with RANSAC to refine the transformation matrix
+        self.transformation_matrix, _ = cv2.findHomography(image_points, real_coords, method=cv2.RANSAC, ransacReprojThreshold=5.0, maxIters=iterations, confidence=0.99)
+        self.inverse_transformation_matrix = np.linalg.inv(self.transformation_matrix)
+
+        self.calibration_done = True
+        self.main_window.interpolationAction.setEnabled(True)
     def advanced_corner_detection(self, image):
         """Improves corner detection using optimized algorithms."""
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)

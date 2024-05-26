@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem, QLabel, \
-    QInputDialog, QMenu, QRubberBand, QApplication
-from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QFont
+    QInputDialog, QMenu, QRubberBand, QApplication, QGraphicsLineItem
+from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QFont, QColor
 from PyQt5.QtCore import Qt, QPointF, QRectF, QRect, QSize
 import numpy as np
 from point import Point
@@ -199,17 +199,31 @@ class ImageView(QGraphicsView):
             point_graphic.setData(0, point)
             self.data_points_graphics.append(point_graphic)
 
-    def draw_interpolated_points(self, interpolated_points):
+    def draw_interpolated_points(self, points):
         """Draws interpolated points on the image."""
-        for point_graphic in self.interpolated_points_graphics:
-            self.scene.removeItem(point_graphic)
-        self.interpolated_points_graphics = []
-        for point in interpolated_points:
-            x = point.get_image_coordinates().x()
-            y = point.get_image_coordinates().y()
-            point_graphic = self.scene.addEllipse(x - 2, y - 2, 4, 4, QPen(Qt.green), QBrush(Qt.green))
-            self.interpolated_points_graphics.append(point_graphic)
+        pen = QPen(Qt.green, 4)
+        for point in points:
+            ellipse = self.scene.addEllipse(point.get_image_coordinates().x() - 2,
+                                            point.get_image_coordinates().y() - 2,
+                                            4, 4, pen)
+            ellipse.setData(0, point)
+    def draw_confidence_intervals(self, x_new, lower_bound, upper_bound):
+        """Draws confidence intervals for the interpolated points."""
+        pen = QPen(QColor(255, 0, 0, 127), 2, Qt.SolidLine)
+        for x, y_low, y_high in zip(x_new, lower_bound, upper_bound):
+            low_point = self.parent().calibration.inverse_transform_point(x, y_low)
+            high_point = self.parent().calibration.inverse_transform_point(x, y_high)
+            line = QGraphicsLineItem(low_point.x(), low_point.y(), high_point.x(), high_point.y())
+            line.setPen(pen)
+            self.scene.addItem(line)
 
+    def clear_interpolated_points(self):
+        """Clears interpolated points from the image."""
+        for item in self.scene.items():
+            if isinstance(item, QGraphicsEllipseItem) and item.pen().color() == Qt.red:
+                self.scene.removeItem(item)
+            if isinstance(item, QGraphicsLineItem) and item.pen().color() == QColor(255, 0, 0, 127):
+                self.scene.removeItem(item)
     def draw_detected_points(self, detected_points):
         """Draws detected points on the image."""
         for point_graphic in self.detected_points_graphics:
@@ -274,11 +288,6 @@ class ImageView(QGraphicsView):
         self.clear_highlights()
         self.update()
 
-    def clear_interpolated_points(self):
-        """Clears interpolated points from the scene."""
-        for point_graphic in self.interpolated_points_graphics:
-            self.scene.removeItem(point_graphic)
-        self.interpolated_points_graphics = []
 
     def clear_detected_points(self):
         """Clears all detected points from the scene."""

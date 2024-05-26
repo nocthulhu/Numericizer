@@ -31,6 +31,9 @@ class MainWindow(QMainWindow):
         self.feature_detection_mode = False
 
         self.original_image = None
+        self.undo_stack = []
+        self.redo_stack = []
+
         self.initUI()
 
     def initUI(self):
@@ -131,6 +134,23 @@ class MainWindow(QMainWindow):
         deletePointAction.triggered.connect(self.delete_data_point)
         toolsMenu.addAction(deletePointAction)
 
+        selectionToolAction = QAction('&Selection Tool', self)
+        selectionToolAction.setToolTip('Enable selection tool')
+        selectionToolAction.triggered.connect(self.enable_selection_tool)
+        toolsMenu.addAction(selectionToolAction)
+
+        self.undoAction = QAction('&Undo', self)
+        self.undoAction.setShortcut('Ctrl+Z')
+        self.undoAction.setToolTip('Undo the last action')
+        self.undoAction.triggered.connect(self.undo)
+        toolsMenu.addAction(self.undoAction)
+
+        self.redoAction = QAction('&Redo', self)
+        self.redoAction.setShortcut('Ctrl+Y')
+        self.redoAction.setToolTip('Redo the last undone action')
+        self.redoAction.triggered.connect(self.redo)
+        toolsMenu.addAction(self.redoAction)
+
         self.show_data_points()
 
         viewMenu = self.menuBar().addMenu('&View')
@@ -144,6 +164,17 @@ class MainWindow(QMainWindow):
         data_points_list.setGeometry(800, 50, 200, 500)
         data_points_list.itemDoubleClicked.connect(self.edit_data_point)
         return data_points_list
+
+    def enable_selection_tool(self):
+        """Enables the selection tool."""
+        self.calibration_mode = False
+        self.extraction_mode = False
+        self.interpolation_mode = False
+        self.perspective_mode = False
+        self.feature_detection_mode = False
+        self.image_view.selection_mode = True
+        self.setCursor(QCursor(Qt.ArrowCursor))
+        self.image_view.clear_selection()
 
     def open_image(self):
         """Opens an image file and displays it."""
@@ -242,6 +273,7 @@ class MainWindow(QMainWindow):
             self.image_view.update_scene()
             self.interpolation.clear_interpolated_points()  # Ensure interpolated points are cleared
         self.image_view.selection_mode = not self.feature_detection_mode
+
     def mousePressEvent(self, event):
         """Handles mouse press events to select data points."""
         if event.button() == Qt.LeftButton and self.feature_detection_mode:
@@ -411,36 +443,46 @@ class MainWindow(QMainWindow):
 
     def edit_data_point(self, item):
         """Edits the selected data point."""
-        index = self.data_points_list.row(item)
-        total_points = len(self.extraction.get_data_points())
-        if index < total_points:
-            point = self.extraction.data_points[index]
-            coords = point.get_real_coordinates()
-            x, ok_x = QInputDialog.getDouble(self, "Edit Point", "X Coordinate:", coords.x(), -10000, 10000, 2)
-            y, ok_y = QInputDialog.getDouble(self, "Edit Point", "Y Coordinate:", coords.y(), -10000, 10000, 2)
+        point = item.data(0)  # Retrieve the point object from the QGraphicsEllipseItem
+        if point:
+            # Get the real coordinates for editing
+            real_coords = point.get_real_coordinates()
+            x, ok_x = QInputDialog.getDouble(self, "Edit Point", "X Coordinate:", real_coords.x(), -10000, 10000, 2)
+            y, ok_y = QInputDialog.getDouble(self, "Edit Point", "Y Coordinate:", real_coords.y(), -10000, 10000, 2)
             if ok_x and ok_y:
-                new_coords = QPointF(x, y)
-                point.set_image_coordinates(new_coords)
-                point.set_real_coordinates(self.calibration.image_to_real_coordinates(new_coords))
+                # Update the real coordinates
+                new_real_coords = QPointF(x, y)
+                # Convert the new real coordinates back to image coordinates
+                new_image_coords = self.calibration.inverse_transform_point(x, y)
+                point.set_image_coordinates(new_image_coords)
+                point.set_real_coordinates(new_real_coords)
                 self.image_view.update_scene()
                 self.show_data_points()
+                self.save_undo_state("edit_data_point", item, point)  # Save state for undo
+            else:
+                QMessageBox.warning(self, "Invalid Selection", "Cannot edit an interpolated point.")
+
+    def delete_data_point(self, item=None):
+        """Deletes a selected data point or multiple selected data points."""
+        if item:
+            point = item.data(0)
+            if point in self.extraction.data_points:
+                self.extraction.data_points.remove(point)
+            elif point in self.interpolation.interpolated_points:
+                self.interpolation.interpolated_points.remove(point)
+            self.image_view.delete_highlight(point)
         else:
-            QMessageBox.warning(self, "Invalid Selection", "Cannot edit an interpolated point.")
-
-    def delete_data_point(self):
-        """Deletes a selected data point."""
-        items = self.data_points_list.selectedItems()
-        total_points = len(self.extraction.get_data_points())
-
-        if items:
+            items = self.image_view.selected_items
             for item in items:
-                index = self.data_points_list.row(item)
-                if index < total_points:
-                    self.extraction.delete_data_point(index)
-                else:
-                    self.interpolation.interpolated_points.pop(index - total_points)
-                self.show_data_points()
-                self.update_image()
+                point = item.data(0)
+                if point in self.extraction.data_points:
+                    self.extraction.data_points.remove(point)
+                elif point in self.interpolation.interpolated_points:
+                    self.interpolation.interpolated_points.remove(point)
+                self.image_view.delete_highlight(point)
+        self.image_view.clear_selection()
+        self.show_data_points()
+        self.update_image()
 
     def plot_data_points(self):
         """Plots the data points using matplotlib."""
@@ -467,3 +509,36 @@ class MainWindow(QMainWindow):
         plt.title('Data Points Plot')
         plt.legend()
         plt.show()
+
+    def save_undo_state(self, action, item, point):
+        """Saves the current state for undo functionality."""
+        self.undo_stack.append((action, item, point))
+        self.redo_stack.clear()  # Clear the redo stack on new action
+
+    def undo(self):
+        """Undo the last action."""
+        if not self.undo_stack:
+            return
+        action, item, point = self.undo_stack.pop()
+        if action == "edit_data_point":
+            self.redo_stack.append((action, item, point))
+            self.edit_data_point(item)
+        elif action == "delete_data_point":
+            self.redo_stack.append((action, item, point))
+            self.extraction.data_points.append(point)
+            self.show_data_points()
+            self.update_image()
+
+    def redo(self):
+        """Redo the last undone action."""
+        if not self.redo_stack:
+            return
+        action, item, point = self.redo_stack.pop()
+        if action == "edit_data_point":
+            self.undo_stack.append((action, item, point))
+            self.edit_data_point(item)
+        elif action == "delete_data_point":
+            self.undo_stack.append((action, item, point))
+            self.extraction.data_points.remove(point)
+            self.show_data_points()
+            self.update_image()

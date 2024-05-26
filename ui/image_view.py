@@ -1,7 +1,9 @@
-from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem, QLabel, QInputDialog, QMenu, QRubberBand, QApplication
+from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem, QLabel, \
+    QInputDialog, QMenu, QRubberBand, QApplication
 from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QFont
 from PyQt5.QtCore import Qt, QPointF, QRectF, QRect, QSize
 import numpy as np
+from point import Point
 
 class ImageView(QGraphicsView):
     """Class to handle displaying images and interacting with points on the image."""
@@ -29,8 +31,9 @@ class ImageView(QGraphicsView):
         self.rubber_band = QRubberBand(QRubberBand.Rectangle, self)
         self.origin = QPointF()
         self.selection_mode = True  # Default tool
-        self.selected_item = None
+        self.selected_items = []  # To store selected items
         self.dragging = False
+        self.drag_start_position = None  # Initialize drag_start_position
 
     def set_image(self, image):
         """Sets and displays the given image in the view."""
@@ -66,6 +69,8 @@ class ImageView(QGraphicsView):
         """Handles mouse press events to add points or perform perspective correction."""
         if event.button() == Qt.LeftButton:
             self.origin = event.pos()
+            if not event.modifiers() & Qt.ControlModifier:
+                self.clear_selection()
             if self.selection_mode:
                 self.rubber_band.setGeometry(QRect(self.origin, QSize()))
                 self.rubber_band.show()
@@ -100,21 +105,23 @@ class ImageView(QGraphicsView):
             scene_pos = self.mapToScene(event.pos())
             item = self.scene.itemAt(scene_pos, self.transform())
             if isinstance(item, QGraphicsEllipseItem):
-                self.selected_item = item
-                self.drag_start_position = event.pos()
+                self.selected_items = [item]  # Store selected item(s)
+                self.drag_start_position = event.pos()  # Set drag start position
             else:
-                self.selected_item = None
+                self.selected_items = []
 
     def mouseMoveEvent(self, event):
         if self.selection_mode and not self.rubber_band.isHidden():
             self.rubber_band.setGeometry(QRect(self.origin, event.pos()).normalized())
-        elif self.selected_item and (event.pos() - self.drag_start_position).manhattanLength() > QApplication.startDragDistance():
+        elif self.selected_items and self.drag_start_position and (
+                event.pos() - self.drag_start_position).manhattanLength() > QApplication.startDragDistance():
             self.dragging = True
             new_pos = self.mapToScene(event.pos())
-            self.selected_item.setPos(new_pos - self.selected_item.boundingRect().center())
-            point = self.selected_item.data(0)
-            if point:
-                point.set_image_coordinates(new_pos)
+            for item in self.selected_items:
+                item.setPos(new_pos - item.boundingRect().center())
+                point = item.data(0)
+                if point:
+                    point.set_image_coordinates(new_pos)
             self.update_scene()
 
     def mouseReleaseEvent(self, event):
@@ -123,16 +130,27 @@ class ImageView(QGraphicsView):
             rect = self.rubber_band.geometry()
             selection_rect = self.mapToScene(rect).boundingRect()
             selected_items = self.scene.items(selection_rect)
+            self.clear_selection()  # Clear previous selection
             for item in selected_items:
                 if isinstance(item, QGraphicsEllipseItem):
-                    item.setBrush(QBrush(Qt.yellow))
                     point = item.data(0)
-                    if point and point not in self.highlighted_points:
-                        self.highlighted_points.append(point)
+                    if isinstance(point, Point):  # Ensure we are working with Point objects
+                        self.highlight_point(point)
+                        self.selected_items.append(item)
             self.update_scene()
         elif event.button() == Qt.RightButton:
-            self.selected_item = None
+            self.selected_items = []
             self.dragging = False
+            self.drag_start_position = None  # Reset drag start position
+
+    def clear_selection(self):
+        """Clears the current selection."""
+        for item in self.selected_items:
+            point = item.data(0)
+            if isinstance(point, Point):  # Ensure we are working with Point objects
+                self.delete_highlight(point)
+        self.selected_items = []
+        self.update_scene()
     def add_perspective_point(self, point):
         """Adds a point for perspective correction."""
         ellipse = QGraphicsEllipseItem(point.x() - 5, point.y() - 5, 10, 10)
@@ -256,6 +274,7 @@ class ImageView(QGraphicsView):
         for point_graphic in self.interpolated_points_graphics:
             self.scene.removeItem(point_graphic)
         self.interpolated_points_graphics = []
+
     def clear_detected_points(self):
         """Clears all detected points from the scene."""
         for point_graphic in self.detected_points_graphics:
@@ -297,7 +316,7 @@ class ImageView(QGraphicsView):
             if action == edit_action:
                 self.main_window.edit_data_point(item)
             elif action == delete_action:
-                self.delete_point(item)
+                self.main_window.delete_data_point(item)  # Call delete_data_point from main_window
 
     def delete_point(self, item):
         """Deletes the selected data point."""
@@ -305,4 +324,5 @@ class ImageView(QGraphicsView):
         if point:
             self.scene.removeItem(item)
             self.main_window.extraction.data_points.remove(point)
+            self.main_window.image_view.delete_highlight(point)  # Ensure highlight is removed
             self.update_scene()

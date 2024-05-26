@@ -67,10 +67,14 @@ class Calibration:
             dtype=np.float32)
 
         self.transformation_matrix, _ = cv2.findHomography(image_points, real_coords)
-        self.inverse_transformation_matrix, _ = cv2.findHomography(real_coords, image_points)
+        self.inverse_transformation_matrix = np.linalg.inv(self.transformation_matrix)  # Ters matris hesaplama
 
         self.calibration_done = True
         self.main_window.interpolationAction.setEnabled(True)
+
+        # Hata ayıklama mesajları
+        print(f"Transformation matrix: \n{self.transformation_matrix}")
+        print(f"Inverse transformation matrix: \n{self.inverse_transformation_matrix}")
 
     def transform_points(self, data_points):
         """Transforms data points using the calibration matrix."""
@@ -89,8 +93,16 @@ class Calibration:
 
     def inverse_transform_point(self, x, y):
         """Transforms real-world coordinates back to image coordinates using the inverse calibration matrix."""
+        if self.inverse_transformation_matrix is None:
+            raise ValueError("Inverse transformation matrix has not been calculated yet.")
+
         real_coords = np.array([[x, y]], dtype=np.float32).reshape(-1, 1, 2)
         img_coords = cv2.perspectiveTransform(real_coords, self.inverse_transformation_matrix)
+
+
+        print(f"Real coordinates: ({x}, {y})")
+        print(f"Transformed image coordinates: ({img_coords[0][0][0]}, {img_coords[0][0][1]})")
+
         return QPointF(img_coords[0][0][0], img_coords[0][0][1])
 
     def image_to_real_coordinates(self, point):

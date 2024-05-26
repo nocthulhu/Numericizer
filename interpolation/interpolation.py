@@ -1,5 +1,6 @@
 import numpy as np
 from scipy.interpolate import interp1d
+from PyQt5.QtCore import QPointF
 from point import Point
 
 
@@ -17,30 +18,24 @@ class Interpolation:
             raise ValueError("At least two data points are required for interpolation.")
 
         # Sort data points by their real x-coordinates to ensure proper interpolation
-        data_points = sorted(data_points, key=lambda point: point.get_real_coordinates().x())
-        x = [point.get_real_coordinates().x() for point in data_points if point.get_real_coordinates() is not None]
-        y = [point.get_real_coordinates().y() for point in data_points if point.get_real_coordinates() is not None]
+        valid_points = [point for point in data_points if point.get_real_coordinates() is not None]
+        valid_points = sorted(valid_points, key=lambda point: point.get_real_coordinates().x())
 
-        if len(x) < 2 or len(y) < 2:
+        if len(valid_points) < 2:
             raise ValueError("Not enough valid real coordinates for interpolation.")
 
+        x = [point.get_real_coordinates().x() for point in valid_points]
+        y = [point.get_real_coordinates().y() for point in valid_points]
+
+        x_min, x_max = min(x), max(x)
+        num_points = max(len(data_points) * 40, 30)  # Ensure at least 30 points
+        x_new = np.linspace(x_min, x_max, num_points)
+        y_new = np.interp(x_new, x, y)
+
         self.interpolated_points = []
-
-        # Interpolate between each pair of points
-        for i in range(len(data_points) - 1):
-            x1, y1 = x[i], y[i]
-            x2, y2 = x[i + 1], y[i + 1]
-
-            # Calculate the number of interpolated points between each pair
-            num_points_between = max(30, int(np.hypot(x2 - x1, y2 - y1)))  # At least 10 points between each pair
-
-            x_new = np.linspace(x1, x2, num_points_between)
-            y_new = np.interp(x_new, [x1, x2], [y1, y2])
-
-            # Append interpolated points
-            for xi, yi in zip(x_new, y_new):
-                interpolated_point = Point(self.calibration.inverse_transform_point(xi, yi), point_type='interpolated')
-                self.interpolated_points.append(interpolated_point)
+        for x_val, y_val in zip(x_new, y_new):
+            image_coords = self.calibration.inverse_transform_point(x_val, y_val)
+            self.interpolated_points.append(Point(image_coords, QPointF(x_val, y_val), point_type='interpolated'))
 
         self.main_window.image_view.draw_interpolated_points(self.interpolated_points)
 

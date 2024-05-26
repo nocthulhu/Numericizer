@@ -1,31 +1,26 @@
-class Point:
-    """Class to represent a point with image coordinates, real coordinates, and type."""
+from PyQt5.QtCore import QPointF
 
-    def __init__(self, image_coordinates, real_coordinates=None, point_type=None):
+
+class Point:
+    """Class to represent a point in both image and real-world coordinates."""
+
+    def __init__(self, image_coordinates, real_coordinates=None, point_type='data'):
         self.image_coordinates = image_coordinates
-        self.real_coordinates = real_coordinates
+        self.real_coordinates = real_coordinates if real_coordinates is not None else QPointF()
         self.point_type = point_type
 
-    def get_image_coordinates(self):
-        """Returns the image coordinates."""
+    def set_image_coordinates(self, coordinates: QPointF):
+        """Sets the image coordinates of the point."""
+        self.image_coordinates = coordinates
+
+    def get_image_coordinates(self) -> QPointF:
+        """Returns the image coordinates of the point."""
         return self.image_coordinates
 
-    def get_real_coordinates(self):
-        """Returns the real coordinates."""
+    def set_real_coordinates(self, coordinates: QPointF):
+        """Sets the real-world coordinates of the point."""
+        self.real_coordinates = coordinates
+
+    def get_real_coordinates(self) -> QPointF:
+        """Returns the real-world coordinates of the point."""
         return self.real_coordinates
-
-    def set_image_coordinates(self, new_coords):
-        """Sets new image coordinates."""
-        self.image_coordinates = new_coords
-
-    def set_real_coordinates(self, new_coords):
-        """Sets new real coordinates."""
-        self.real_coordinates = new_coords
-
-    def get_point_type(self):
-        """Returns the point type."""
-        return self.point_type
-
-    def set_point_type(self, point_type):
-        """Sets a new point type."""
-        self.point_type = point_type

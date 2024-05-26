@@ -1,5 +1,5 @@
 from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem, QLabel, QInputDialog, QMenu, QRubberBand, QApplication
-from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QFont, QMouseEvent
+from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QFont
 from PyQt5.QtCore import Qt, QPointF, QRectF, QRect, QSize
 import numpy as np
 
@@ -16,7 +16,7 @@ class ImageView(QGraphicsView):
         self.calibration_points_graphics = []
         self.data_points_graphics = []
         self.interpolated_points_graphics = []
-        self.detected_points_graphics = []  # List to hold graphics items for detected points
+        self.detected_points_graphics = []
         self.highlighted_points = []
         self.perspective_points = []
         self.info_label = QLabel(self)
@@ -88,7 +88,7 @@ class ImageView(QGraphicsView):
                             self.main_window.update_perspective_info()
                         self.update_scene()
                     elif self.main_window.feature_detection_mode:
-                        for point in self.main_window.extraction.temp_points:  # Use temp_points instead of detected_points
+                        for point in self.main_window.extraction.temp_points:
                             if point.x() - 3 <= scene_pos.x() <= point.x() + 3 and \
                                     point.y() - 3 <= scene_pos.y() <= point.y() + 3:
                                 self.main_window.extraction.add_data_point(point)
@@ -182,7 +182,7 @@ class ImageView(QGraphicsView):
             x = point.get_image_coordinates().x()
             y = point.get_image_coordinates().y()
             point_graphic = self.scene.addEllipse(x - 3, y - 3, 6, 6, QPen(Qt.blue), QBrush(Qt.blue))
-            point_graphic.setData(0, point)  # Store the point object in the graphics item
+            point_graphic.setData(0, point)
             self.data_points_graphics.append(point_graphic)
 
     def draw_interpolated_points(self, interpolated_points):
@@ -294,22 +294,9 @@ class ImageView(QGraphicsView):
             action = context_menu.exec_(self.mapToGlobal(event.pos()))
 
             if action == edit_action:
-                self.edit_point(item)
+                self.main_window.edit_data_point(item)
             elif action == delete_action:
                 self.delete_point(item)
-
-    def edit_point(self, item):
-        """Edits the selected data point."""
-        point = item.data(0)  # Retrieve the point object
-        if point:
-            coords = point.get_image_coordinates()
-            x, ok_x = QInputDialog.getDouble(self, "Edit Point", "X Coordinate:", coords.x(), -10000, 10000, 2)
-            y, ok_y = QInputDialog.getDouble(self, "Edit Point", "Y Coordinate:", coords.y(), -10000, 10000, 2)
-            if ok_x and ok_y:
-                new_coords = QPointF(x, y)
-                item.setRect(x - 3, y - 3, 6, 6)
-                point.set_image_coordinates(new_coords)
-                self.update_scene()
 
     def delete_point(self, item):
         """Deletes the selected data point."""

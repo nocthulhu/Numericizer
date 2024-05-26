@@ -1,4 +1,5 @@
-from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, QFileDialog, QListWidget, QListWidgetItem, QInputDialog, QMessageBox, QToolTip
+from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, QFileDialog, QListWidget, QListWidgetItem, QInputDialog, \
+    QMessageBox, QToolTip
 from PyQt5.QtGui import QCursor, QFont
 from PyQt5.QtCore import Qt, QPointF
 from ui.image_view import ImageView
@@ -11,15 +12,15 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 
+
 class MainWindow(QMainWindow):
     """Main application window class."""
 
-    def __init__(self):
-        super().__init__()
-        self.image_processor = ImageProcessor()
+    def __init__(self, parent=None):
+        super(MainWindow, self).__init__(parent)
         self.calibration = Calibration(self)
-        self.extraction = DataExtraction(self.calibration, self)  # Pass calibration and main_window
-        self.interpolation = Interpolation(self.calibration)
+        self.extraction = DataExtraction(self)
+        self.interpolation = Interpolation(self.calibration, self)
         self.data_exporter = DataExporter()
 
         self.calibration_mode = False
@@ -30,6 +31,7 @@ class MainWindow(QMainWindow):
 
         self.original_image = None
         self.initUI()
+
     def initUI(self):
         """Initializes the user interface components."""
         self.setWindowTitle('Numericizer')
@@ -165,9 +167,9 @@ class MainWindow(QMainWindow):
 
     def toggle_extraction_mode(self):
         """Toggles the data extraction mode."""
-        if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 3:
+        if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 4:
             QMessageBox.warning(self, "Calibration Required",
-                                "Calibration is required before extraction. Please calibrate at least 3 points.")
+                                "Calibration is required before extraction. Please calibrate at least 4 points.")
             return
 
         self.image_view.update_scene()
@@ -212,9 +214,9 @@ class MainWindow(QMainWindow):
 
     def toggle_feature_detection_mode(self):
         """Toggles the advanced feature detection mode."""
-        if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 3:
+        if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 4:
             QMessageBox.warning(self, "Calibration Required",
-                                "Calibration is required before feature detection. Please calibrate at least 3 points.")
+                                "Calibration is required before feature detection. Please calibrate at least 4 points.")
             return
 
         self.image_view.update_scene()
@@ -244,7 +246,7 @@ class MainWindow(QMainWindow):
         if event.button() == Qt.LeftButton and self.feature_detection_mode:
             pos = event.pos()
             scene_pos = self.image_view.mapToScene(pos)
-            items = self.image_view.items(scene_pos.toPoint())  # Use toPoint() to match expected argument type
+            items = self.image_view.items(scene_pos.toPoint())
             for item in items:
                 if isinstance(item, QGraphicsEllipseItem):
                     point = item.data(0)
@@ -318,9 +320,9 @@ class MainWindow(QMainWindow):
 
     def toggle_interpolation_mode(self):
         """Toggles the interpolation mode."""
-        if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 3:
+        if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 4:
             QMessageBox.warning(self, "Calibration Required",
-                                "Calibration is required before interpolation. Please calibrate at least 3 points.")
+                                "Calibration is required before interpolation. Please calibrate at least 4 points.")
             return
 
         self.interpolation_mode = not self.interpolation_mode
@@ -345,9 +347,9 @@ class MainWindow(QMainWindow):
 
     def export_data_as_csv(self):
         """Exports the data points as a CSV file."""
-        if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 3:
+        if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 4:
             QMessageBox.warning(self, "Calibration Required",
-                                "Calibration is required before exporting data points. Please calibrate at least 3 points.")
+                                "Calibration is required before exporting data points. Please calibrate at least 4 points.")
             return
 
         if self.interpolation_mode:
@@ -364,9 +366,9 @@ class MainWindow(QMainWindow):
 
     def export_data_as_json(self):
         """Exports the data points as a JSON file."""
-        if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 3:
+        if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 4:
             QMessageBox.warning(self, "Calibration Required",
-                                "Calibration is required before exporting data points. Please calibrate at least 3 points.")
+                                "Calibration is required before exporting data points. Please calibrate at least 4 points.")
             return
 
         if self.interpolation_mode:
@@ -404,15 +406,23 @@ class MainWindow(QMainWindow):
             item = QListWidgetItem(f"Interpolated Point {i + 1}: {point.get_real_coordinates()}")
             self.data_points_list.addItem(item)
 
-    def edit_data_point(self, index, new_coords):
-        """Edits a data point at the given index with new coordinates."""
-        point = self.extraction.data_points[index]
-        real_coords = point.get_real_coordinates()
-        x, y = real_coords.x(), real_coords.y()
-        self.extraction.data_points[index].set_image_coordinates(new_coords)
-        self.extraction.data_points[index].set_real_coordinates(self.calibration.image_to_real_coordinates(new_coords))
-        self.image_view.update_scene()
-        self.show_data_points()
+    def edit_data_point(self, item):
+        """Edits the selected data point."""
+        index = self.data_points_list.row(item)
+        total_points = len(self.extraction.get_data_points())
+        if index < total_points:
+            point = self.extraction.data_points[index]
+            coords = point.get_real_coordinates()
+            x, ok_x = QInputDialog.getDouble(self, "Edit Point", "X Coordinate:", coords.x(), -10000, 10000, 2)
+            y, ok_y = QInputDialog.getDouble(self, "Edit Point", "Y Coordinate:", coords.y(), -10000, 10000, 2)
+            if ok_x and ok_y:
+                new_coords = QPointF(x, y)
+                point.set_image_coordinates(new_coords)
+                point.set_real_coordinates(self.calibration.image_to_real_coordinates(new_coords))
+                self.image_view.update_scene()
+                self.show_data_points()
+        else:
+            QMessageBox.warning(self, "Invalid Selection", "Cannot edit an interpolated point.")
 
     def delete_data_point(self):
         """Deletes a selected data point."""

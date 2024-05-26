@@ -21,7 +21,7 @@ class Calibration:
 
     def add_calibration_point(self, point: QPointF, automatic=False):
         """Adds a calibration point and triggers dialog for real coordinates input."""
-        if len(self.calibration_points) < 4:  # Use 4 points for homography
+        if len(self.calibration_points) < 4:  # Allow selecting 4 calibration points
             point_obj = Point(point, point_type='calibration')
             self.calibration_points.append(point_obj)
 
@@ -31,10 +31,11 @@ class Calibration:
             dialog.setWindowTitle(f"Enter Real Coordinates for Point {len(self.calibration_points)}")
             result = dialog.exec()
             if result == QDialog.Accepted:
-                point_obj.set_real_coordinates(dialog.real_coordinates)
+                real_x, real_y = dialog.real_coordinates
+                point_obj.set_real_coordinates(QPointF(real_x, real_y))
                 self.main_window.image_view.delete_highlight(point_obj)
                 self.main_window.image_view.draw_calibration_points(self.calibration_points)
-                if len(self.calibration_points) == 4:
+                if len(self.calibration_points) == 4:  # Calculate transformation matrix after 4 points are selected
                     self.calculate_transformation_matrix()
             elif result == 1000:  # Next point
                 self.calibration_points.pop()
@@ -56,15 +57,19 @@ class Calibration:
 
     def calculate_transformation_matrix(self):
         """Calculates the transformation matrix based on calibration points."""
-        if len(self.calibration_points) != 4:  # Use 4 points for homography
+        if len(self.calibration_points) != 4:
             raise ValueError("Exactly 4 calibration points are required to calculate the transformation matrix.")
 
         image_points = np.array(
-            [[p.get_image_coordinates().x(), p.get_image_coordinates().y()] for p in self.calibration_points])
-        real_coords = np.array([p.get_real_coordinates() for p in self.calibration_points])
-        self.transformation_matrix, status = cv2.findHomography(
-            image_points.astype(np.float32), real_coords.astype(np.float32)
-        )
+            [[p.get_image_coordinates().x(), p.get_image_coordinates().y()] for p in self.calibration_points],
+            dtype=np.float32)
+        real_coords = np.array(
+            [[p.get_real_coordinates().x(), p.get_real_coordinates().y()] for p in self.calibration_points],
+            dtype=np.float32)
+
+        self.transformation_matrix, _ = cv2.findHomography(image_points, real_coords)
+        self.inverse_transformation_matrix, _ = cv2.findHomography(real_coords, image_points)
+
         self.calibration_done = True
         self.main_window.interpolationAction.setEnabled(True)
 
@@ -75,30 +80,28 @@ class Calibration:
 
         transformed_points = []
         for point in data_points:
-            img_coords = np.array([[point.get_image_coordinates().x(), point.get_image_coordinates().y()]],
+            img_coords = np.array([[point.get_image_coordinates().x(), point.get_image_coordinates().y(), 1.0]],
                                   dtype=np.float32)
             real_coords = cv2.perspectiveTransform(np.array([img_coords]), self.transformation_matrix)
-            point.set_real_coordinates(real_coords[0][0].tolist())
+            point.set_real_coordinates(QPointF(real_coords[0][0][0], real_coords[0][0][1]))
             transformed_points.append(point)
 
         return transformed_points
 
     def inverse_transform_point(self, x, y):
         """Transforms real-world coordinates back to image coordinates using the inverse calibration matrix."""
-        real_coords = np.array([[x, y]], dtype=np.float32)
-        img_coords = cv2.perspectiveTransform(np.array([real_coords]), np.linalg.inv(self.transformation_matrix))
-        return img_coords[0][0].tolist()
+        real_coords = np.array([[x, y]], dtype=np.float32).reshape(-1, 1, 2)
+        img_coords = cv2.perspectiveTransform(real_coords, self.inverse_transformation_matrix)
+        return QPointF(img_coords[0][0][0], img_coords[0][0][1])
 
-    def image_to_real_coordinates(self, image_coords):
-        """Converts image coordinates to real-world coordinates using the calibration data."""
-        if not self.calibration_done or len(self.calibration_points) < 4:
-            raise ValueError("Calibration is not complete.")
+    def image_to_real_coordinates(self, point):
+        """Transforms image coordinates to real-world coordinates using the calibration matrix."""
+        if not self.calibration_done:
+            raise RuntimeError("Calibration is not complete. Please complete calibration before transforming points.")
 
-        img_coords = np.array([[image_coords.x(), image_coords.y()]], dtype=np.float32)
-        real_coords = cv2.perspectiveTransform(np.array([img_coords]), self.transformation_matrix)
-        real_x, real_y = real_coords[0][0]
-
-        return QPointF(real_x, real_y)
+        img_coords = np.array([[point.x(), point.y()]], dtype=np.float32).reshape(-1, 1, 2)
+        real_coords = cv2.perspectiveTransform(img_coords, self.transformation_matrix)
+        return QPointF(real_coords[0][0][0], real_coords[0][0][1])
 
     def advanced_corner_detection(self, image):
         """Improves corner detection using optimized algorithms."""
@@ -161,7 +164,7 @@ class Calibration:
         line_mag = np.sqrt((x2 - x1) ** 2 + (y2 - y1) ** 2)
         if line_mag < 1e-10:
             return np.sqrt((px - x1) ** 2 + (py - y1) ** 2)
-        u = ((px - x1) * (x2 - x1) + (py - y1) * (y2 - y1)) / line_mag ** 2
+        u = ((px - x1) * (x2 - x1) + (py - y1)) / line_mag ** 2
         if u < 0 or u > 1:
             ix = min(max(x1, x2), max(px, px))
             iy = min(max(y1, y2), max(py, py))
@@ -208,10 +211,8 @@ class Calibration:
                     self.add_calibration_point(corner, automatic=True)
             if len(self.calibration_points) == 4:
                 self.calculate_transformation_matrix()
-                print("Calibration complete.")
             else:
                 self.clear_calibration_points()
-                print("Calibration not complete. Not enough points.")
         else:
             print("Not enough corners detected for calibration.")
         self.automatic_calibration_mode = False

@@ -3,7 +3,7 @@ from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, QFileDialog, QLi
 from PyQt5.QtGui import QCursor, QFont
 from PyQt5.QtCore import Qt, QPointF
 from ui.image_view import ImageView
-from image_processing import ImageProcessor
+from image_processing import ImageProcessor  # Adjust this import if needed
 from calibration import Calibration
 from data_extraction import DataExtraction
 from interpolation import Interpolation
@@ -18,8 +18,9 @@ class MainWindow(QMainWindow):
 
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
+        self.image_processor = ImageProcessor()
         self.calibration = Calibration(self)
-        self.extraction = DataExtraction(self)
+        self.extraction = DataExtraction(self.calibration, self)
         self.interpolation = Interpolation(self.calibration, self)
         self.data_exporter = DataExporter()
 

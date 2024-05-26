@@ -106,21 +106,18 @@ class ImageView(QGraphicsView):
                 self.selected_item = None
 
     def mouseMoveEvent(self, event):
-        """Handles mouse move events for the selection tool."""
         if self.selection_mode and not self.rubber_band.isHidden():
             self.rubber_band.setGeometry(QRect(self.origin, event.pos()).normalized())
         elif self.selected_item and (event.pos() - self.drag_start_position).manhattanLength() > QApplication.startDragDistance():
             self.dragging = True
             new_pos = self.mapToScene(event.pos())
             self.selected_item.setPos(new_pos - self.selected_item.boundingRect().center())
-            # Update the corresponding point in the data model
-            for point in self.main_window.extraction.data_points:
-                if point.get_image_coordinates() == self.selected_item.data(0).get_image_coordinates():
-                    point.set_image_coordinates(new_pos)
+            point = self.selected_item.data(0)
+            if point:
+                point.set_image_coordinates(new_pos)
             self.update_scene()
 
     def mouseReleaseEvent(self, event):
-        """Handles mouse release events to finalize selection or dragging."""
         if self.selection_mode and event.button() == Qt.LeftButton:
             self.rubber_band.hide()
             rect = self.rubber_band.geometry()
@@ -136,7 +133,6 @@ class ImageView(QGraphicsView):
         elif event.button() == Qt.RightButton:
             self.selected_item = None
             self.dragging = False
-
     def add_perspective_point(self, point):
         """Adds a point for perspective correction."""
         ellipse = QGraphicsEllipseItem(point.x() - 5, point.y() - 5, 10, 10)
@@ -262,7 +258,6 @@ class ImageView(QGraphicsView):
         self.detected_points_graphics = []
 
     def update_scene(self):
-        """Updates the scene with the current points and image."""
         if self.main_window.feature_detection_mode:
             self.draw_detected_points(self.main_window.extraction.temp_points)
         else:
@@ -272,7 +267,6 @@ class ImageView(QGraphicsView):
         self.draw_calibration_points(self.main_window.calibration.calibration_points)
         self.draw_data_points(self.main_window.extraction.data_points)
         self.draw_interpolated_points(self.main_window.interpolation.interpolated_points)
-
         self.fitInView(self.sceneRect(), Qt.KeepAspectRatio)
 
     def show_info_label(self, text):

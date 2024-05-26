@@ -12,12 +12,12 @@ class DataExtraction:
 
 
     def add_data_point(self, scene_pos):
-        """Adds a data point at the given scene position."""
-        real_coordinates = self.calibration.image_to_real_coordinates(scene_pos)
-        point = Point(scene_pos, real_coordinates)
+        """Add a data point at the given scene position."""
+        real_coordinates = self.main_window.calibration.image_to_real_coordinates(scene_pos)
+        point = Point(scene_pos, real_coordinates, point_type='data')
         self.data_points.append(point)
         self.main_window.image_view.draw_data_points(self.data_points)
-        self.main_window.show_data_points()
+
     def delete_data_point(self, index):
         """Deletes a data point at the given index."""
         if 0 <= index < len(self.data_points):
@@ -32,11 +32,10 @@ class DataExtraction:
         self.main_window.show_data_points()
 
     def delete_data_point(self, index):
-        """Deletes a data point at the given index."""
-        del self.data_points[index]
-        self.main_window.image_view.update_scene()
-        self.main_window.show_data_points()
-
+        """Delete a data point at the given index."""
+        if 0 <= index < len(self.data_points):
+            del self.data_points[index]
+            self.main_window.image_view.draw_data_points(self.data_points)
     def get_data_points(self):
         """Returns the list of data points."""
         return self.data_points

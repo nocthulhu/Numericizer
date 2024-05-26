@@ -240,8 +240,8 @@ class MainWindow(QMainWindow):
             self.extraction.clear_temp_points()
             self.image_view.clear_detected_points()
             self.image_view.update_scene()
+            self.interpolation.clear_interpolated_points()  # Ensure interpolated points are cleared
         self.image_view.selection_mode = not self.feature_detection_mode
-
     def mousePressEvent(self, event):
         """Handles mouse press events to select data points."""
         if event.button() == Qt.LeftButton and self.feature_detection_mode:
@@ -344,6 +344,8 @@ class MainWindow(QMainWindow):
                 QMessageBox.warning(self, "Insufficient Data Points",
                                     "At least 2 data points are required for interpolation.")
                 self.interpolation_mode = False
+        else:
+            self.interpolation.clear_interpolated_points()
         self.image_view.selection_mode = not self.interpolation_mode
 
     def export_data_as_csv(self):

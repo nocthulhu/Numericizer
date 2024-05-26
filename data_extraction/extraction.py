@@ -10,43 +10,29 @@ class DataExtraction:
         self.calibration = calibration
         self.main_window = main_window
 
-
     def add_data_point(self, scene_pos):
         """Add a data point at the given scene position."""
-        real_coordinates = self.main_window.calibration.image_to_real_coordinates(scene_pos)
+        real_coordinates = self.calibration.image_to_real_coordinates(scene_pos)
         point = Point(scene_pos, real_coordinates, point_type='data')
         self.data_points.append(point)
         self.main_window.image_view.draw_data_points(self.data_points)
+        if self.main_window.interpolation_mode:
+            self.main_window.interpolation.interpolate_data(self.data_points)
+        self.main_window.show_data_points()
 
     def delete_data_point(self, index):
         """Deletes a data point at the given index."""
         if 0 <= index < len(self.data_points):
             del self.data_points[index]
-
-
-    def edit_data_point(self, index, new_coords):
-        """Edits a data point at the given index with new coordinates."""
-        self.data_points[index].set_image_coordinates(new_coords)
-        self.data_points[index].set_real_coordinates(self.calibration.image_to_real_coordinates(new_coords))
-        self.main_window.image_view.update_scene()
-        self.main_window.show_data_points()
-
-    def delete_data_point(self, index):
-        """Delete a data point at the given index."""
-        if 0 <= index < len(self.data_points):
-            del self.data_points[index]
             self.main_window.image_view.draw_data_points(self.data_points)
+            if self.main_window.interpolation_mode:
+                self.main_window.interpolation.interpolate_data(self.data_points)
+            self.main_window.show_data_points()
+
     def get_data_points(self):
         """Returns the list of data points."""
         return self.data_points
-    def add_detected_point(self, point: QPointF):
-        """Adds a detected point for visualization."""
-        point_obj = Point(point, point_type='detected')
-        self.detected_points.append(point_obj)
 
-    def clear_detected_points(self):
-        """Clears the list of detected points."""
-        self.detected_points.clear()
     def clear_temp_points(self):
         """Clears the temporary points found during automatic extraction."""
         self.temp_points = []
@@ -74,21 +60,4 @@ class DataExtraction:
                     point = QPointF(cX, cY)
                     self.temp_points.append(point)
 
-
         return image
-
-
-    def find_intersections(self, lines):
-        """Finds intersections between lines."""
-        intersections = []
-        if lines is not None:
-            for i in range(len(lines)):
-                for j in range(i + 1, len(lines)):
-                    x1, y1, x2, y2 = lines[i][0]
-                    x3, y3, x4, y4 = lines[j][0]
-                    denom = (x1 - x2) * (y3 - y4) - (y1 - y2) * (x3 - x4)
-                    if denom != 0:
-                        intersect_x = int(((x1 * y2 - y1 * x2) * (x3 - x4) - (x1 - x2) * (x3 * y4 - y3 * x4)) / denom)
-                        intersect_y = int(((x1 * y2 - y1 * x2) * (y3 - y4) - (y1 - y2) * (x3 * y4 - y3 * x4)) / denom)
-                        intersections.append((intersect_x, intersect_y))
-        return intersections

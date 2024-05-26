@@ -251,6 +251,11 @@ class ImageView(QGraphicsView):
         self.clear_highlights()
         self.update()
 
+    def clear_interpolated_points(self):
+        """Clears interpolated points from the scene."""
+        for point_graphic in self.interpolated_points_graphics:
+            self.scene.removeItem(point_graphic)
+        self.interpolated_points_graphics = []
     def clear_detected_points(self):
         """Clears all detected points from the scene."""
         for point_graphic in self.detected_points_graphics:
@@ -258,6 +263,7 @@ class ImageView(QGraphicsView):
         self.detected_points_graphics = []
 
     def update_scene(self):
+        """Updates the scene with the current points and image."""
         if self.main_window.feature_detection_mode:
             self.draw_detected_points(self.main_window.extraction.temp_points)
         else:
@@ -267,6 +273,7 @@ class ImageView(QGraphicsView):
         self.draw_calibration_points(self.main_window.calibration.calibration_points)
         self.draw_data_points(self.main_window.extraction.data_points)
         self.draw_interpolated_points(self.main_window.interpolation.interpolated_points)
+
         self.fitInView(self.sceneRect(), Qt.KeepAspectRatio)
 
     def show_info_label(self, text):

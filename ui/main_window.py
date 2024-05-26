@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QAction, QFileDialog, QListWidget,
                              QListWidgetItem, QInputDialog, QMessageBox, QToolTip, QVBoxLayout,
-                             QHBoxLayout, QGridLayout, QWidget, QDockWidget, QStatusBar)
+                             QHBoxLayout, QGridLayout, QWidget, QDockWidget, QStatusBar, QLabel, QPushButton)
 from PyQt5.QtGui import QCursor, QFont, QPen, QIcon
 from PyQt5.QtCore import Qt, QPointF
 from ui.image_view import ImageView
@@ -13,6 +13,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import cv2
 import os
+import qdarkstyle
 
 
 class MainWindow(QMainWindow):
@@ -20,6 +21,7 @@ class MainWindow(QMainWindow):
 
     def __init__(self, parent=None):
         super(MainWindow, self).__init__(parent)
+        self.app = QApplication.instance()
         self.image_processor = ImageProcessor()
         self.calibration = Calibration(self)
         self.extraction = DataExtraction(self.calibration, self)
@@ -42,6 +44,46 @@ class MainWindow(QMainWindow):
         """Initializes the user interface components."""
         self.setWindowTitle('Numericizer')
         self.setGeometry(100, 100, 1200, 800)
+        self.setWindowFlags( Qt.Window)
+
+        self.title_bar = QWidget(self)
+        self.title_bar.setObjectName("title_bar")
+        self.title_bar.setStyleSheet("""
+            QWidget#title_bar {
+                background-color: #444;
+                color: white;}""")
+
+        self.title_bar.setFixedHeight(30)
+
+        self.title_label = QLabel("Numericizer", self.title_bar)
+        self.title_label.setStyleSheet("margin-left: 10px;")
+
+        self.minimize_button = QPushButton("-", self.title_bar)
+        self.minimize_button.setFixedSize(30, 30)
+        self.minimize_button.clicked.connect(self.showMinimized)
+
+        self.maximize_button = QPushButton("⬜", self.title_bar)
+        self.maximize_button.setFixedSize(30, 30)
+        self.maximize_button.clicked.connect(self.toggle_maximize_restore)
+
+        self.close_button = QPushButton("✕", self.title_bar)
+        self.close_button.setFixedSize(30, 30)
+        self.close_button.clicked.connect(self.close)
+
+        title_layout = QHBoxLayout(self.title_bar)
+        title_layout.addWidget(self.title_label)
+        title_layout.addStretch()
+        title_layout.addWidget(self.minimize_button)
+        title_layout.addWidget(self.maximize_button)
+        title_layout.addWidget(self.close_button)
+        title_layout.setContentsMargins(0, 0, 0, 0)
+        title_layout.setSpacing(0)
+
+        central_widget = QWidget(self)
+        central_layout = QVBoxLayout(central_widget)
+        central_layout.addWidget(self.title_bar)
+        central_layout.setContentsMargins(0, 0, 0, 0)
+        central_layout.setSpacing(0)
 
         self.image_view = ImageView(self)
 
@@ -67,12 +109,32 @@ class MainWindow(QMainWindow):
         self.createToolBars()
         self.createDockWidget()
 
+        self.setMouseTracking(True)
+        self.old_position = self.pos()
+
+    def mousePressEvent(self, event):
+        """Handles mouse press events for moving the window."""
+        if event.button() == Qt.LeftButton:
+            self.old_position = event.globalPos()
+
+    def mouseMoveEvent(self, event):
+        """Handles mouse move events for moving the window."""
+        if event.buttons() == Qt.LeftButton:
+            delta = QPointF(event.globalPos() - self.old_position)
+            self.move(self.x() + int(delta.x()), self.y() + int(delta.y()))
+            self.old_position = event.globalPos()
+
+    def toggle_maximize_restore(self):
+        """Toggles between maximized and normal states."""
+        if self.isMaximized():
+            self.showNormal()
+        else:
+            self.showMaximized()
     def createActions(self):
         """Creates the actions for the application."""
         self.openAction = QAction(QIcon('icons/open_image.png'), '&Open Image', self)
         self.openAction.setToolTip('Open an image file for processing')
         self.openAction.triggered.connect(self.open_image)
-
 
         self.exportCsvAction = QAction(QIcon('icons/export_csv.png'), '&Export as CSV', self)
         self.exportCsvAction.setToolTip('Export the extracted data points as a CSV file')
@@ -87,8 +149,7 @@ class MainWindow(QMainWindow):
         self.calibrationAction.setEnabled(False)
         self.calibrationAction.triggered.connect(self.toggle_calibration_mode)
 
-        self.automaticCalibrationAction = QAction(QIcon('icons/automatic_calibration.png'),
-                                                  '&Automatic Calibration (Experimental)', self)
+        self.automaticCalibrationAction = QAction(QIcon('icons/automatic_calibration.png'), '&Automatic Calibration (Experimental)', self)
         self.automaticCalibrationAction.setToolTip('Automatically calibrate the axes')
         self.automaticCalibrationAction.setEnabled(False)
         self.automaticCalibrationAction.triggered.connect(self.automatic_calibration)
@@ -158,6 +219,14 @@ class MainWindow(QMainWindow):
         self.resetViewAction = QAction(QIcon('icons/reset_view.png'), 'Reset View', self)
         self.resetViewAction.triggered.connect(self.reset_view)
 
+        self.magnifierAction = QAction(QIcon('icons/magnifier.png'), 'Magnifier Tool', self)
+        self.magnifierAction.setToolTip('Activate magnifier tool')
+        self.magnifierAction.triggered.connect(self.toggle_magnifier_mode)
+
+        self.toggleThemeAction = QAction('&Toggle Dark Theme', self)
+        self.toggleThemeAction.setToolTip('Toggle between dark and light themes')
+        self.toggleThemeAction.setCheckable(True)
+        self.toggleThemeAction.triggered.connect(self.toggle_theme)
     def createMenus(self):
         """Creates the menus for the application."""
         menubar = self.menuBar()
@@ -190,9 +259,42 @@ class MainWindow(QMainWindow):
         viewMenu.addAction(self.plotPointsAction)
         viewMenu.addAction(self.resetViewAction)
 
+        viewMenu.addAction(self.magnifierAction)
+        viewMenu.addAction(self.toggleThemeAction)
+
         interpolationMenu = menubar.addMenu('Interpolation Method')
         self.add_interpolation_methods(interpolationMenu)
 
+    def toggle_magnifier_mode(self):
+        """Toggles the magnifier mode."""
+        if self.image_view.magnifier.isVisible():
+            self.image_view.magnifier.setVisible(False)
+            self.status_bar.showMessage("Magnifier tool deactivated.", 5000)
+            self.image_view.setCursor(Qt.ArrowCursor)
+        else:
+            # Disable other modes
+            self.calibration_mode = False
+            self.extraction_mode = False
+            self.interpolation_mode = False
+            self.perspective_mode = False
+            self.feature_detection_mode = False
+            self.image_view.selection_mode = False
+
+            self.image_view.clear_selection()
+
+            # Enable magnifier
+            self.image_view.magnifier.setVisible(True)
+            self.status_bar.showMessage("Magnifier tool activated. Use middle mouse button to magnify.", 5000)
+            self.image_view.setCursor(Qt.CrossCursor)
+
+    def toggle_theme(self):
+        """Toggles the application theme between dark and light."""
+        if self.toggleThemeAction.isChecked():
+            self.app.setStyleSheet(qdarkstyle.load_stylesheet_pyqt5())
+            self.status_bar.showMessage("Dark theme activated.", 5000)
+        else:
+            self.app.setStyleSheet("")
+            self.status_bar.showMessage("Light theme activated.", 5000)
     def createToolBars(self):
         """Creates the toolbars for the application."""
         mainToolBar = self.addToolBar('Main')
@@ -207,6 +309,7 @@ class MainWindow(QMainWindow):
         mainToolBar.addAction(self.denoiseAction)
         mainToolBar.addAction(self.perspectiveAction)
         mainToolBar.addAction(self.rotateAction)
+        mainToolBar.addAction(self.magnifierAction)  # Add magnifier tool to the toolbar
 
     def createDockWidget(self):
         """Creates a dock widget for additional tools."""
@@ -280,6 +383,7 @@ class MainWindow(QMainWindow):
             self.rotateAction.setEnabled(True)
             self.detectedPointsAction.setEnabled(True)
             self.status_bar.showMessage(f"Image {os.path.basename(file_path)} loaded.", 5000)
+
     def set_interpolation_method(self, method):
         """Sets the interpolation method in the Interpolation class."""
         try:
@@ -287,12 +391,6 @@ class MainWindow(QMainWindow):
             QMessageBox.information(self, "Interpolation Method", f"Interpolation method set to {method}.")
         except ValueError as e:
             QMessageBox.warning(self, "Error", str(e))
-
-    def init_data_points_list(self):
-        data_points_list = QListWidget(self)
-        data_points_list.setGeometry(800, 50, 200, 500)
-        data_points_list.itemDoubleClicked.connect(self.edit_data_point)
-        return data_points_list
 
     def enable_selection_tool(self):
         """Enables the selection tool."""
@@ -357,7 +455,6 @@ class MainWindow(QMainWindow):
         self.image_processor.correct_perspective(pts1, pts2)
         self.update_image()
         self.status_bar.showMessage("Perspective corrected.", 5000)
-
     def toggle_feature_detection_mode(self):
         """Toggles the advanced feature detection mode."""
         if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 4:
@@ -390,7 +487,6 @@ class MainWindow(QMainWindow):
             self.interpolation.clear_interpolated_points()  # Ensure interpolated points are cleared
             self.status_bar.showMessage("Advanced feature detection disabled.", 5000)
         self.image_view.selection_mode = not self.feature_detection_mode
-
     def draw_confidence_intervals(self, x_new, lower_bound, upper_bound):
         """Draws confidence intervals for the interpolated points."""
         for x, y_low, y_high in zip(x_new, lower_bound, upper_bound):
@@ -398,25 +494,9 @@ class MainWindow(QMainWindow):
             high_point = self.calibration.inverse_transform_point(x, y_high)
             self.image_view.scene.addLine(low_point.x(), low_point.y(), high_point.x(), high_point.y(),
                                           QPen(Qt.red, 0.5))
-
     def show_error_metric(self, rmse):
         """Displays the RMSE of the interpolation."""
         QMessageBox.information(self, "Interpolation Error", f"Root Mean Squared Error (RMSE): {rmse:.2f}")
-
-    def mousePressEvent(self, event):
-        """Handles mouse press events to select data points."""
-        if event.button() == Qt.LeftButton and self.feature_detection_mode:
-            pos = event.pos()
-            scene_pos = self.image_view.mapToScene(pos)
-            items = self.image_view.items(scene_pos.toPoint())
-            for item in items:
-                if isinstance(item, QGraphicsEllipseItem):
-                    point = item.data(0)
-                    if point in self.extraction.temp_points:
-                        self.extraction.add_data_point(point)
-                        self.show_data_points()
-                        self.update_image()
-                        break
 
     def toggle_perspective_mode(self):
         """Toggles the perspective correction mode."""
@@ -478,7 +558,6 @@ class MainWindow(QMainWindow):
         self.image_processor.denoise_image()
         self.update_image()
         self.status_bar.showMessage("Image denoised.", 5000)
-
     def toggle_calibration_mode(self):
         """Toggles the calibration mode."""
         self.calibration_mode = not self.calibration_mode
@@ -492,6 +571,7 @@ class MainWindow(QMainWindow):
             self.status_bar.showMessage("Calibration mode enabled.", 5000)
         else:
             self.status_bar.showMessage("Calibration mode disabled.", 5000)
+
     def toggle_interpolation_mode(self):
         """Toggles the interpolation mode."""
         if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 4:

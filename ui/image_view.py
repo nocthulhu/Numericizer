@@ -1,15 +1,15 @@
-from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem, QLabel, \
-    QInputDialog, QMenu, QRubberBand, QApplication, QGraphicsLineItem
-from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QFont, QColor
+from PyQt5.QtWidgets import QGraphicsView, QGraphicsScene, QGraphicsPixmapItem, QGraphicsEllipseItem, QLabel, QInputDialog, QMenu, QRubberBand, QApplication, QGraphicsLineItem, QGraphicsRectItem
+from PyQt5.QtGui import QPixmap, QImage, QPen, QBrush, QFont, QColor, QPainter
 from PyQt5.QtCore import Qt, QPointF, QRectF, QRect, QSize
 import numpy as np
 from point import Point
-
+import calibration.calibration
 class ImageView(QGraphicsView):
     """Class to handle displaying images and interacting with points on the image."""
 
     def __init__(self, parent=None):
         super().__init__(parent)
+
         self.scene = QGraphicsScene()
         self.setScene(self.scene)
         self.pixmap_item = None
@@ -34,6 +34,13 @@ class ImageView(QGraphicsView):
         self.selected_items = []  # To store selected items
         self.dragging = False
         self.drag_start_position = None  # Initialize drag_start_position
+
+        # Magnifier tool
+        self.magnifier = QGraphicsRectItem()
+        self.magnifier.setRect(0, 0, 20, 20)
+        self.magnifier.setPen(QPen(Qt.green, 2))
+        self.magnifier.setVisible(False)
+        self.scene.addItem(self.magnifier)
 
     def set_image(self, image):
         """Sets and displays the given image in the view."""
@@ -110,11 +117,11 @@ class ImageView(QGraphicsView):
             else:
                 self.selected_items = []
 
-
     def mouseMoveEvent(self, event):
         if self.selection_mode and not self.rubber_band.isHidden():
             self.rubber_band.setGeometry(QRect(self.origin, event.pos()).normalized())
-        elif self.selected_items and self.drag_start_position and (event.pos() - self.drag_start_position).manhattanLength() > QApplication.startDragDistance():
+        elif self.selected_items and self.drag_start_position and (
+                event.pos() - self.drag_start_position).manhattanLength() > QApplication.startDragDistance():
             self.dragging = True
             new_pos = self.mapToScene(event.pos())
             for item in self.selected_items:
@@ -123,6 +130,9 @@ class ImageView(QGraphicsView):
                 if point:
                     point.set_image_coordinates(new_pos)
             self.update_scene()
+        # Magnifier tool functionality
+        if self.magnifier.isVisible():
+            self.update_magnifier(event)
 
     def mouseReleaseEvent(self, event):
         if self.selection_mode and event.button() == Qt.LeftButton:
@@ -143,6 +153,28 @@ class ImageView(QGraphicsView):
             self.dragging = False
             self.drag_start_position = None  # Reset drag start position
 
+    def update_magnifier(self, event):
+        """Updates the position and content of the magnifier."""
+        if event.buttons() & Qt.MiddleButton:
+            self.magnifier.setVisible(True)
+            scene_pos = self.mapToScene(event.pos())
+            self.magnifier.setRect(scene_pos.x() - 50, scene_pos.y() - 50, 100, 100)
+            self.update_magnifier_content(scene_pos)
+        else:
+            self.magnifier.setVisible(False)
+
+    def update_magnifier_content(self, scene_pos):
+        """Updates the content inside the magnifier."""
+        if self.pixmap_item:
+            pixmap = self.pixmap_item.pixmap()
+            rect = self.magnifier.rect()
+            magnified_image = pixmap.copy(rect.toRect()).scaled(rect.width() * 2, rect.height() * 2, Qt.KeepAspectRatio)
+            painter = QPainter(self.pixmap_item.pixmap())
+            painter.setOpacity(0.5)
+            painter.drawPixmap(rect.topLeft(), magnified_image)
+            painter.end()
+        self.update()
+
     def clear_selection(self):
         """Clears the current selection."""
         for item in self.selected_items:
@@ -151,6 +183,7 @@ class ImageView(QGraphicsView):
                 self.delete_highlight(point)
         self.selected_items = []
         self.update()
+
     def add_perspective_point(self, point):
         """Adds a point for perspective correction."""
         ellipse = QGraphicsEllipseItem(point.x() - 5, point.y() - 5, 10, 10)
@@ -159,6 +192,7 @@ class ImageView(QGraphicsView):
         self.scene.addItem(ellipse)
         self.perspective_points.append(point)
         self.update()
+
     def draw_calibration_points(self, calibration_points):
         """Draws calibration points on the image."""
         for point_graphic in self.calibration_points_graphics:
@@ -206,22 +240,24 @@ class ImageView(QGraphicsView):
         pen = QPen(Qt.green, 4)
         for point in points:
             real_coords = point.get_real_coordinates()
-            image_coords = self.parent().calibration.inverse_transform_point(real_coords.x(), real_coords.y())
+            image_coords = self.main_window.calibration.inverse_transform_point(real_coords.x(), real_coords.y())
             ellipse = self.scene.addEllipse(image_coords.x() - 2,
                                             image_coords.y() - 2,
                                             4, 4, pen)
             ellipse.setData(0, point)
         self.update()
+
     def draw_confidence_intervals(self, x_new, lower_bound, upper_bound):
         """Draws confidence intervals for the interpolated points."""
         pen = QPen(QColor(255, 0, 0, 127), 2, Qt.SolidLine)
         for x, y_low, y_high in zip(x_new, lower_bound, upper_bound):
-            low_point = self.parent().calibration.inverse_transform_point(x, y_low)
-            high_point = self.parent().calibration.inverse_transform_point(x, y_high)
+            low_point = self.main_window.calibration.inverse_transform_point(x, y_low)
+            high_point = self.main_window.calibration.inverse_transform_point(x, y_high)
             line = QGraphicsLineItem(low_point.x(), low_point.y(), high_point.x(), high_point.y())
             line.setPen(pen)
             self.scene.addItem(line)
         self.update()
+
     def clear_interpolated_points(self):
         """Clears interpolated points from the image."""
         for item in self.scene.items():
@@ -230,6 +266,7 @@ class ImageView(QGraphicsView):
             if isinstance(item, QGraphicsLineItem) and item.pen().color() == QColor(255, 0, 0, 127):
                 self.scene.removeItem(item)
         self.update()
+
     def draw_detected_points(self, detected_points):
         """Draws detected points on the image."""
         for point_graphic in self.detected_points_graphics:
@@ -260,6 +297,7 @@ class ImageView(QGraphicsView):
             ellipse.setPen(QPen(Qt.yellow))
             self.scene.addItem(ellipse)
         self.update()
+
     def delete_highlight(self, point):
         """Deletes a specific highlight from the image."""
         new_highlighted_points = []
@@ -293,7 +331,6 @@ class ImageView(QGraphicsView):
         self.calibration_points_graphics = []
         self.clear_highlights()
         self.update()
-
 
     def clear_detected_points(self):
         """Clears all detected points from the scene."""

@@ -1,5 +1,7 @@
-from PyQt5.QtWidgets import QApplication, QMainWindow, QAction, QFileDialog, QListWidget, QListWidgetItem, QInputDialog, QMessageBox, QToolTip
-from PyQt5.QtGui import QCursor, QFont, QPen
+from PyQt5.QtWidgets import (QApplication, QMainWindow, QAction, QFileDialog, QListWidget,
+                             QListWidgetItem, QInputDialog, QMessageBox, QToolTip, QVBoxLayout,
+                             QHBoxLayout, QGridLayout, QWidget, QDockWidget, QStatusBar)
+from PyQt5.QtGui import QCursor, QFont, QPen, QIcon
 from PyQt5.QtCore import Qt, QPointF
 from ui.image_view import ImageView
 from image_processing import ImageProcessor
@@ -10,6 +12,7 @@ from export import DataExporter
 import matplotlib.pyplot as plt
 import numpy as np
 import cv2
+import os
 
 
 class MainWindow(QMainWindow):
@@ -38,131 +41,183 @@ class MainWindow(QMainWindow):
     def initUI(self):
         """Initializes the user interface components."""
         self.setWindowTitle('Numericizer')
-        self.setGeometry(100, 100, 1000, 600)
+        self.setGeometry(100, 100, 1200, 800)
 
         self.image_view = ImageView(self)
-        self.setCentralWidget(self.image_view)
 
-        # Tooltip configuration
-        QToolTip.setFont(QFont('SansSerif', 10))
-        self.setToolTip('This is the main window of the application.')
+        central_widget = QWidget(self)
+        self.setCentralWidget(central_widget)
 
-        menubar = self.menuBar()
-        fileMenu = menubar.addMenu('&File')
-        openAction = QAction('&Open Image', self)
-        openAction.setToolTip('Open an image file for processing')
-        openAction.triggered.connect(self.open_image)
-        fileMenu.addAction(openAction)
+        main_layout = QHBoxLayout()
+        central_widget.setLayout(main_layout)
 
-        exportMenu = fileMenu.addMenu('&Export Data')
-        exportCsvAction = QAction('&Export as CSV', self)
-        exportCsvAction.setToolTip('Export the extracted data points as a CSV file')
-        exportCsvAction.triggered.connect(self.export_data_as_csv)
-        exportMenu.addAction(exportCsvAction)
+        left_layout = QVBoxLayout()
+        self.data_points_list = self.init_data_points_list()
+        left_layout.addWidget(self.data_points_list)
 
-        exportJsonAction = QAction('&Export as JSON', self)
-        exportJsonAction.setToolTip('Export the extracted data points as a JSON file')
-        exportJsonAction.triggered.connect(self.export_data_as_json)
-        exportMenu.addAction(exportJsonAction)
+        main_layout.addLayout(left_layout)
+        main_layout.addWidget(self.image_view)
 
-        toolsMenu = menubar.addMenu('&Tools')
-        self.calibrationAction = QAction('&Calibrate Axes', self)
+        # Add status bar
+        self.status_bar = QStatusBar()
+        self.setStatusBar(self.status_bar)
+
+        self.createActions()
+        self.createMenus()
+        self.createToolBars()
+        self.createDockWidget()
+
+    def createActions(self):
+        """Creates the actions for the application."""
+        self.openAction = QAction(QIcon('icons/open_image.png'), '&Open Image', self)
+        self.openAction.setToolTip('Open an image file for processing')
+        self.openAction.triggered.connect(self.open_image)
+
+
+        self.exportCsvAction = QAction(QIcon('icons/export_csv.png'), '&Export as CSV', self)
+        self.exportCsvAction.setToolTip('Export the extracted data points as a CSV file')
+        self.exportCsvAction.triggered.connect(self.export_data_as_csv)
+
+        self.exportJsonAction = QAction(QIcon('icons/export_json.png'), '&Export as JSON', self)
+        self.exportJsonAction.setToolTip('Export the extracted data points as a JSON file')
+        self.exportJsonAction.triggered.connect(self.export_data_as_json)
+
+        self.calibrationAction = QAction(QIcon('icons/calibrate.png'), '&Calibrate Axes', self)
         self.calibrationAction.setToolTip('Calibrate the axes using known reference points')
         self.calibrationAction.setEnabled(False)
         self.calibrationAction.triggered.connect(self.toggle_calibration_mode)
-        toolsMenu.addAction(self.calibrationAction)
 
-        self.automaticCalibrationAction = QAction('&Automatic Calibration (Experimental)', self)
+        self.automaticCalibrationAction = QAction(QIcon('icons/automatic_calibration.png'),
+                                                  '&Automatic Calibration (Experimental)', self)
         self.automaticCalibrationAction.setToolTip('Automatically calibrate the axes')
         self.automaticCalibrationAction.setEnabled(False)
         self.automaticCalibrationAction.triggered.connect(self.automatic_calibration)
-        toolsMenu.addAction(self.automaticCalibrationAction)
 
-        self.extractionAction = QAction('&Extract Data', self)
+        self.extractionAction = QAction(QIcon('icons/extract.png'), '&Extract Data', self)
         self.extractionAction.setToolTip('Extract data points from the image')
         self.extractionAction.setEnabled(False)
         self.extractionAction.triggered.connect(self.toggle_extraction_mode)
-        toolsMenu.addAction(self.extractionAction)
 
-        self.interpolationAction = QAction('&Interpolate Data', self)
+        self.interpolationAction = QAction(QIcon('icons/interpolate.png'), '&Interpolate Data', self)
         self.interpolationAction.setToolTip('Interpolate data points between the extracted points')
         self.interpolationAction.setEnabled(False)
         self.interpolationAction.triggered.connect(self.toggle_interpolation_mode)
-        toolsMenu.addAction(self.interpolationAction)
 
-        self.detected_points_action = QAction('&Advanced Feature Detection', self)
-        self.detected_points_action.setToolTip('Detect advanced features like lines and intersections in the image')
-        self.detected_points_action.setEnabled(False)
-        self.detected_points_action.triggered.connect(self.toggle_feature_detection_mode)
-        toolsMenu.addAction(self.detected_points_action)
+        self.detectedPointsAction = QAction(QIcon('icons/feature_detection.png'), '&Advanced Feature Detection', self)
+        self.detectedPointsAction.setToolTip('Detect advanced features like lines and intersections in the image')
+        self.detectedPointsAction.setEnabled(False)
+        self.detectedPointsAction.triggered.connect(self.toggle_feature_detection_mode)
 
-        imageProcessingMenu = menubar.addMenu('&Image Processing')
-        self.histogramAction = QAction('&Equalize Histogram', self)
+        self.histogramAction = QAction(QIcon('icons/histogram.png'), '&Equalize Histogram', self)
         self.histogramAction.setToolTip('Apply histogram equalization to the image')
         self.histogramAction.setEnabled(False)
         self.histogramAction.triggered.connect(self.equalize_histogram)
-        imageProcessingMenu.addAction(self.histogramAction)
 
-        self.edgeAction = QAction('&Edge Detection', self)
+        self.edgeAction = QAction(QIcon('icons/edge_detection.png'), '&Edge Detection', self)
         self.edgeAction.setToolTip('Apply edge detection to the image')
         self.edgeAction.setEnabled(False)
         self.edgeAction.triggered.connect(self.edge_detection)
-        imageProcessingMenu.addAction(self.edgeAction)
 
-        self.denoiseAction = QAction('&Denoise Image', self)
+        self.denoiseAction = QAction(QIcon('icons/denoise.png'), '&Denoise Image', self)
         self.denoiseAction.setToolTip('Apply denoising to the image')
         self.denoiseAction.setEnabled(False)
         self.denoiseAction.triggered.connect(self.denoise_image)
-        imageProcessingMenu.addAction(self.denoiseAction)
 
-        self.perspectiveAction = QAction('&Correct Perspective', self)
+        self.perspectiveAction = QAction(QIcon('icons/perspective.png'), '&Correct Perspective', self)
         self.perspectiveAction.setToolTip('Correct the perspective of the image')
         self.perspectiveAction.setEnabled(False)
         self.perspectiveAction.triggered.connect(self.toggle_perspective_mode)
-        imageProcessingMenu.addAction(self.perspectiveAction)
 
-        self.rotateAction = QAction('&Rotate Image', self)
+        self.rotateAction = QAction(QIcon('icons/rotate_image.png'), '&Rotate Image', self)
         self.rotateAction.setToolTip('Rotate the image by a specified angle')
         self.rotateAction.setEnabled(False)
         self.rotateAction.triggered.connect(self.rotate_image)
-        imageProcessingMenu.addAction(self.rotateAction)
 
-        self.data_points_list = self.init_data_points_list()
-        deletePointAction = QAction('&Delete Data Point', self)
-        deletePointAction.setToolTip('Delete a selected data point')
-        deletePointAction.triggered.connect(self.delete_data_point)
-        toolsMenu.addAction(deletePointAction)
+        self.deletePointAction = QAction('&Delete Data Point', self)
+        self.deletePointAction.setToolTip('Delete a selected data point')
+        self.deletePointAction.triggered.connect(self.delete_data_point)
 
-        selectionToolAction = QAction('&Selection Tool', self)
-        selectionToolAction.setToolTip('Enable selection tool')
-        selectionToolAction.triggered.connect(self.enable_selection_tool)
-        toolsMenu.addAction(selectionToolAction)
+        self.selectionToolAction = QAction(QIcon('icons/selection_tool.png'), '&Selection Tool', self)
+        self.selectionToolAction.setToolTip('Enable selection tool')
+        self.selectionToolAction.triggered.connect(self.enable_selection_tool)
 
-        self.undoAction = QAction('&Undo', self)
+        self.undoAction = QAction(QIcon('icons/undo.png'), '&Undo', self)
         self.undoAction.setShortcut('Ctrl+Z')
         self.undoAction.setToolTip('Undo the last action')
         self.undoAction.triggered.connect(self.undo)
-        toolsMenu.addAction(self.undoAction)
 
-        self.redoAction = QAction('&Redo', self)
+        self.redoAction = QAction(QIcon('icons/redo.png'), '&Redo', self)
         self.redoAction.setShortcut('Ctrl+Y')
         self.redoAction.setToolTip('Redo the last undone action')
         self.redoAction.triggered.connect(self.redo)
+
+        self.plotPointsAction = QAction(QIcon('icons/plot_data_points.png'), '&Plot Data Points', self)
+        self.plotPointsAction.setToolTip('Plot the extracted data points')
+        self.plotPointsAction.triggered.connect(self.plot_data_points)
+
+        self.resetViewAction = QAction(QIcon('icons/reset_view.png'), 'Reset View', self)
+        self.resetViewAction.triggered.connect(self.reset_view)
+
+    def createMenus(self):
+        """Creates the menus for the application."""
+        menubar = self.menuBar()
+
+        fileMenu = menubar.addMenu('&File')
+        fileMenu.addAction(self.openAction)
+        exportMenu = fileMenu.addMenu('Export As')
+        exportMenu.addAction(self.exportCsvAction)
+        exportMenu.addAction(self.exportJsonAction)
+
+        toolsMenu = menubar.addMenu('&Tools')
+        toolsMenu.addAction(self.calibrationAction)
+        toolsMenu.addAction(self.automaticCalibrationAction)
+        toolsMenu.addAction(self.extractionAction)
+        toolsMenu.addAction(self.interpolationAction)
+        toolsMenu.addAction(self.detectedPointsAction)
+        toolsMenu.addAction(self.deletePointAction)
+        toolsMenu.addAction(self.selectionToolAction)
+        toolsMenu.addAction(self.undoAction)
         toolsMenu.addAction(self.redoAction)
 
-        self.show_data_points()
+        imageProcessingMenu = menubar.addMenu('&Image Processing')
+        imageProcessingMenu.addAction(self.histogramAction)
+        imageProcessingMenu.addAction(self.edgeAction)
+        imageProcessingMenu.addAction(self.denoiseAction)
+        imageProcessingMenu.addAction(self.perspectiveAction)
+        imageProcessingMenu.addAction(self.rotateAction)
 
-        viewMenu = self.menuBar().addMenu('&View')
-        plotPointsAction = QAction('&Plot Data Points', self)
-        plotPointsAction.setToolTip('Plot the extracted data points')
-        plotPointsAction.triggered.connect(self.plot_data_points)
-        viewMenu.addAction(plotPointsAction)
-        resetViewAction = QAction('Reset View', self)
-        resetViewAction.triggered.connect(self.reset_view)
-        viewMenu.addAction(resetViewAction)
+        viewMenu = menubar.addMenu('&View')
+        viewMenu.addAction(self.plotPointsAction)
+        viewMenu.addAction(self.resetViewAction)
 
-        # Interpolation method
-        interpolationMenu = self.menuBar().addMenu('Interpolation Method')
+        interpolationMenu = menubar.addMenu('Interpolation Method')
+        self.add_interpolation_methods(interpolationMenu)
+
+    def createToolBars(self):
+        """Creates the toolbars for the application."""
+        mainToolBar = self.addToolBar('Main')
+        mainToolBar.addAction(self.openAction)
+        mainToolBar.addAction(self.calibrationAction)
+        mainToolBar.addAction(self.automaticCalibrationAction)
+        mainToolBar.addAction(self.extractionAction)
+        mainToolBar.addAction(self.interpolationAction)
+        mainToolBar.addAction(self.detectedPointsAction)
+        mainToolBar.addAction(self.histogramAction)
+        mainToolBar.addAction(self.edgeAction)
+        mainToolBar.addAction(self.denoiseAction)
+        mainToolBar.addAction(self.perspectiveAction)
+        mainToolBar.addAction(self.rotateAction)
+
+    def createDockWidget(self):
+        """Creates a dock widget for additional tools."""
+        dockWidget = QDockWidget('Tools', self)
+        dockWidget.setAllowedAreas(Qt.LeftDockWidgetArea | Qt.RightDockWidgetArea)
+        toolWidget = QWidget()
+        dockWidget.setWidget(toolWidget)
+        self.addDockWidget(Qt.LeftDockWidgetArea, dockWidget)
+
+    def add_interpolation_methods(self, interpolationMenu):
+        """Adds interpolation methods to the interpolation menu."""
         linearAction = QAction('Linear', self)
         splineAction = QAction('Spline', self)
         polynomialAction = QAction('Polynomial', self)
@@ -186,13 +241,6 @@ class MainWindow(QMainWindow):
         interpolationMenu.addAction(pchipAction)
         interpolationMenu.addAction(quadraticAction)
         interpolationMenu.addAction(piecewiseLinearAction)
-    def set_interpolation_method(self, method):
-        """Sets the interpolation method in the Interpolation class."""
-        try:
-            self.interpolation.set_method(method)
-            QMessageBox.information(self, "Interpolation Method", f"Interpolation method set to {method}.")
-        except ValueError as e:
-            QMessageBox.warning(self, "Error", str(e))
 
     def init_data_points_list(self):
         data_points_list = QListWidget(self)
@@ -230,7 +278,32 @@ class MainWindow(QMainWindow):
             self.denoiseAction.setEnabled(True)
             self.perspectiveAction.setEnabled(True)
             self.rotateAction.setEnabled(True)
-            self.detected_points_action.setEnabled(True)
+            self.detectedPointsAction.setEnabled(True)
+            self.status_bar.showMessage(f"Image {os.path.basename(file_path)} loaded.", 5000)
+    def set_interpolation_method(self, method):
+        """Sets the interpolation method in the Interpolation class."""
+        try:
+            self.interpolation.set_method(method)
+            QMessageBox.information(self, "Interpolation Method", f"Interpolation method set to {method}.")
+        except ValueError as e:
+            QMessageBox.warning(self, "Error", str(e))
+
+    def init_data_points_list(self):
+        data_points_list = QListWidget(self)
+        data_points_list.setGeometry(800, 50, 200, 500)
+        data_points_list.itemDoubleClicked.connect(self.edit_data_point)
+        return data_points_list
+
+    def enable_selection_tool(self):
+        """Enables the selection tool."""
+        self.calibration_mode = False
+        self.extraction_mode = False
+        self.interpolation_mode = False
+        self.perspective_mode = False
+        self.feature_detection_mode = False
+        self.image_view.selection_mode = True
+        self.setCursor(QCursor(Qt.ArrowCursor))
+        self.image_view.clear_selection()
 
     def toggle_extraction_mode(self):
         """Toggles the data extraction mode."""
@@ -251,10 +324,13 @@ class MainWindow(QMainWindow):
         if self.extraction_mode:
             if self.image_processor.image is not None:
                 print("Extraction mode enabled.")
+                self.status_bar.showMessage("Extraction mode enabled.", 5000)
             else:
                 print("Load an image first.")
+                self.status_bar.showMessage("Load an image first.", 5000)
         else:
             print("Extraction mode disabled.")
+            self.status_bar.showMessage("Extraction mode disabled.", 5000)
         self.image_view.selection_mode = not self.extraction_mode
 
         self.image_view.update_scene()
@@ -266,8 +342,10 @@ class MainWindow(QMainWindow):
             print("Running advanced feature detection...")
             result_image = self.extraction.automatic_extraction(self.image_processor.image)
             self.image_view.set_image(result_image)
+            self.status_bar.showMessage("Advanced feature detection completed.", 5000)
         else:
             print("Load an image first.")
+            self.status_bar.showMessage("Load an image first.", 5000)
 
     def correct_perspective(self, points):
         """Corrects the perspective of the image using four points."""
@@ -278,6 +356,7 @@ class MainWindow(QMainWindow):
         pts2 = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
         self.image_processor.correct_perspective(pts1, pts2)
         self.update_image()
+        self.status_bar.showMessage("Perspective corrected.", 5000)
 
     def toggle_feature_detection_mode(self):
         """Toggles the advanced feature detection mode."""
@@ -300,13 +379,16 @@ class MainWindow(QMainWindow):
                 result_image = self.extraction.automatic_extraction(self.image_processor.image)
                 self.image_view.set_image(result_image)
                 self.image_view.draw_detected_points(self.extraction.temp_points)
+                self.status_bar.showMessage("Advanced feature detection enabled.", 5000)
             else:
                 print("Load an image first.")
+                self.status_bar.showMessage("Load an image first.", 5000)
         else:
             self.extraction.clear_temp_points()
             self.image_view.clear_detected_points()
             self.image_view.update_scene()
             self.interpolation.clear_interpolated_points()  # Ensure interpolated points are cleared
+            self.status_bar.showMessage("Advanced feature detection disabled.", 5000)
         self.image_view.selection_mode = not self.feature_detection_mode
 
     def draw_confidence_intervals(self, x_new, lower_bound, upper_bound):
@@ -320,6 +402,7 @@ class MainWindow(QMainWindow):
     def show_error_metric(self, rmse):
         """Displays the RMSE of the interpolation."""
         QMessageBox.information(self, "Interpolation Error", f"Root Mean Squared Error (RMSE): {rmse:.2f}")
+
     def mousePressEvent(self, event):
         """Handles mouse press events to select data points."""
         if event.button() == Qt.LeftButton and self.feature_detection_mode:
@@ -336,8 +419,8 @@ class MainWindow(QMainWindow):
                         break
 
     def toggle_perspective_mode(self):
-        self.image_view.update_scene()
         """Toggles the perspective correction mode."""
+        self.image_view.update_scene()
         self.perspective_mode = not self.perspective_mode
         self.calibration_mode = False
         self.extraction_mode = False
@@ -346,6 +429,10 @@ class MainWindow(QMainWindow):
         self.setCursor(QCursor(Qt.CrossCursor if self.perspective_mode else Qt.ArrowCursor))
         self.update_perspective_info()
         self.image_view.selection_mode = not self.perspective_mode
+        if self.perspective_mode:
+            self.status_bar.showMessage("Perspective mode enabled.", 5000)
+        else:
+            self.status_bar.showMessage("Perspective mode disabled.", 5000)
 
     def update_perspective_info(self):
         """Updates the informational label for perspective correction."""
@@ -366,26 +453,31 @@ class MainWindow(QMainWindow):
         if ok and self.image_processor.image is not None:
             self.image_processor.rotate_image(angle)
             self.update_image()
+            self.status_bar.showMessage(f"Image rotated by {angle} degrees.", 5000)
 
     def update_image(self):
         """Updates the displayed image."""
         if self.image_processor.image is not None:
             self.image_view.set_image(self.image_processor.image)
+            self.status_bar.showMessage("Image updated.", 5000)
 
     def equalize_histogram(self):
         """Equalizes the histogram of the image."""
         self.image_processor.equalize_histogram()
         self.update_image()
+        self.status_bar.showMessage("Histogram equalized.", 5000)
 
     def edge_detection(self):
         """Applies edge detection to the image."""
         self.image_processor.edge_detection()
         self.update_image()
+        self.status_bar.showMessage("Edge detection applied.", 5000)
 
     def denoise_image(self):
         """Applies denoising to the image."""
         self.image_processor.denoise_image()
         self.update_image()
+        self.status_bar.showMessage("Image denoised.", 5000)
 
     def toggle_calibration_mode(self):
         """Toggles the calibration mode."""
@@ -396,7 +488,10 @@ class MainWindow(QMainWindow):
         self.feature_detection_mode = False
         self.setCursor(QCursor(Qt.CrossCursor if self.calibration_mode else Qt.ArrowCursor))
         self.image_view.selection_mode = not self.calibration_mode
-
+        if self.calibration_mode:
+            self.status_bar.showMessage("Calibration mode enabled.", 5000)
+        else:
+            self.status_bar.showMessage("Calibration mode disabled.", 5000)
     def toggle_interpolation_mode(self):
         """Toggles the interpolation mode."""
         if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 4:
@@ -426,14 +521,15 @@ class MainWindow(QMainWindow):
                     self.image_view.draw_interpolated_points(interpolated_points)
                 self.show_data_points()
                 self.update_image()
+                self.status_bar.showMessage("Interpolation mode enabled.", 5000)
             else:
                 QMessageBox.warning(self, "Insufficient Data Points",
                                     "At least 2 data points are required for interpolation.")
                 self.interpolation_mode = False
         else:
             self.interpolation.clear_interpolated_points()
+            self.status_bar.showMessage("Interpolation mode disabled.", 5000)
         self.image_view.selection_mode = not self.interpolation_mode
-
 
     def export_data_as_csv(self):
         """Exports the data points as a CSV file."""
@@ -453,7 +549,7 @@ class MainWindow(QMainWindow):
                                                       options=options)
             if filepath:
                 self.data_exporter.export_to_csv(real_coordinates, filepath)
-
+                self.status_bar.showMessage(f"Data exported as CSV to {filepath}.", 5000)
     def export_data_as_json(self):
         """Exports the data points as a JSON file."""
         if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 4:
@@ -472,6 +568,7 @@ class MainWindow(QMainWindow):
                                                       options=options)
             if filepath:
                 self.data_exporter.export_to_json(real_coordinates, filepath)
+                self.status_bar.showMessage(f"Data exported as JSON to {filepath}.", 5000)
 
     # Automatic calibration handler in main_window.py
     def automatic_calibration(self):
@@ -479,9 +576,10 @@ class MainWindow(QMainWindow):
         if self.image_processor.image is not None:
             print("Running automatic calibration...")
             self.calibration.automatic_calibration(self.image_processor.image)
+            self.status_bar.showMessage("Automatic calibration completed.", 5000)
         else:
             print("Load an image first.")
-
+            self.status_bar.showMessage("Load an image first.", 5000)
     def show_data_points(self):
         """Displays the list of data points."""
         self.data_points_list.clear()
@@ -495,7 +593,6 @@ class MainWindow(QMainWindow):
         for i, point in enumerate(interpolated_points):
             item = QListWidgetItem(f"Interpolated Point {i + 1}: {point.get_real_coordinates()}")
             self.data_points_list.addItem(item)
-
     def edit_data_point(self, item):
         """Edits the selected data point."""
         point = item.data(0)  # Retrieve the point object from the QGraphicsEllipseItem
@@ -514,6 +611,7 @@ class MainWindow(QMainWindow):
                 self.image_view.update_scene()
                 self.show_data_points()
                 self.save_undo_state("edit_data_point", item, point)  # Save state for undo
+                self.status_bar.showMessage("Data point edited.", 5000)
             else:
                 QMessageBox.warning(self, "Invalid Selection", "Cannot edit an interpolated point.")
 
@@ -538,12 +636,14 @@ class MainWindow(QMainWindow):
         self.image_view.clear_selection()
         self.show_data_points()
         self.update_image()
+        self.status_bar.showMessage("Data point(s) deleted.", 5000)
 
     def plot_data_points(self):
         """Plots the data points using matplotlib."""
         data_points = self.extraction.get_data_points()
         if not data_points:
             print("No data points to plot.")
+            self.status_bar.showMessage("No data points to plot.", 5000)
             return
 
         valid_data_points = [point for point in data_points if point.get_real_coordinates() is not None]
@@ -564,14 +664,17 @@ class MainWindow(QMainWindow):
         plt.title('Data Points Plot')
         plt.legend()
         plt.show()
+        self.status_bar.showMessage("Data points plotted.", 5000)
 
     def save_undo_state(self, action, item, point):
         """Saves the current state for undo functionality."""
         self.undo_stack.append((action, item, point))
         self.redo_stack.clear()  # Clear the redo stack on new action
+        self.status_bar.showMessage("Undo state saved.", 5000)
     def reset_view(self):
         """Resets the view by centering and resetting zoom."""
         self.image_view.reset_view()
+
     def undo(self):
         """Undo the last action."""
         if not self.undo_stack:

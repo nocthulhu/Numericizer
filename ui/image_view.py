@@ -175,6 +175,7 @@ class ImageView(QGraphicsView):
             self.calibration_points_graphics.append(point_graphic)
             self.calibration_points_graphics.append(text)
         self.update()
+
     def draw_detected_corners(self, corners):
         """Draws detected corners on the image."""
         for point_graphic in self.detected_points_graphics:

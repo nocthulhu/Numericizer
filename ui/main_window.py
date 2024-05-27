@@ -14,8 +14,8 @@ import numpy as np
 import cv2
 import os
 import qdarkstyle
-
-
+from ui.plot_window import PlotWindow
+from point import Point
 class MainWindow(QMainWindow):
     """Main application window class."""
 
@@ -132,7 +132,7 @@ class MainWindow(QMainWindow):
             self.showMaximized()
     def createActions(self):
         """Creates the actions for the application."""
-        self.openAction = QAction(QIcon('icons/open_image.png'), '&Open Image', self)
+        self.openAction = QAction(QIcon('icons/open.png'), '&Open Image', self)
         self.openAction.setToolTip('Open an image file for processing')
         self.openAction.triggered.connect(self.open_image)
 
@@ -149,7 +149,7 @@ class MainWindow(QMainWindow):
         self.calibrationAction.setEnabled(False)
         self.calibrationAction.triggered.connect(self.toggle_calibration_mode)
 
-        self.automaticCalibrationAction = QAction(QIcon('icons/automatic_calibration.png'), '&Automatic Calibration (Experimental)', self)
+        self.automaticCalibrationAction = QAction(QIcon('icons/automatic_calibration.png'), '&Automatic Calibration', self)
         self.automaticCalibrationAction.setToolTip('Automatically calibrate the axes')
         self.automaticCalibrationAction.setEnabled(False)
         self.automaticCalibrationAction.triggered.connect(self.automatic_calibration)
@@ -164,7 +164,7 @@ class MainWindow(QMainWindow):
         self.interpolationAction.setEnabled(False)
         self.interpolationAction.triggered.connect(self.toggle_interpolation_mode)
 
-        self.detectedPointsAction = QAction(QIcon('icons/feature_detection.png'), '&Advanced Feature Detection', self)
+        self.detectedPointsAction = QAction(QIcon('icons/feature_detection.png'), '&Advanced Feature Detection(Experimental)', self)
         self.detectedPointsAction.setToolTip('Detect advanced features like lines and intersections in the image')
         self.detectedPointsAction.setEnabled(False)
         self.detectedPointsAction.triggered.connect(self.toggle_feature_detection_mode)
@@ -189,7 +189,7 @@ class MainWindow(QMainWindow):
         self.perspectiveAction.setEnabled(False)
         self.perspectiveAction.triggered.connect(self.toggle_perspective_mode)
 
-        self.rotateAction = QAction(QIcon('icons/rotate_image.png'), '&Rotate Image', self)
+        self.rotateAction = QAction(QIcon('icons/rotate.png'), '&Rotate Image', self)
         self.rotateAction.setToolTip('Rotate the image by a specified angle')
         self.rotateAction.setEnabled(False)
         self.rotateAction.triggered.connect(self.rotate_image)
@@ -198,7 +198,7 @@ class MainWindow(QMainWindow):
         self.deletePointAction.setToolTip('Delete a selected data point')
         self.deletePointAction.triggered.connect(self.delete_data_point)
 
-        self.selectionToolAction = QAction(QIcon('icons/selection_tool.png'), '&Selection Tool', self)
+        self.selectionToolAction = QAction(QIcon('icons/selection.png'), '&Selection Tool', self)
         self.selectionToolAction.setToolTip('Enable selection tool')
         self.selectionToolAction.triggered.connect(self.enable_selection_tool)
 
@@ -212,9 +212,9 @@ class MainWindow(QMainWindow):
         self.redoAction.setToolTip('Redo the last undone action')
         self.redoAction.triggered.connect(self.redo)
 
-        self.plotPointsAction = QAction(QIcon('icons/plot_data_points.png'), '&Plot Data Points', self)
+        self.plotPointsAction = QAction(QIcon('icons/plot.png'), '&Plot Data Points', self)
         self.plotPointsAction.setToolTip('Plot the extracted data points')
-        self.plotPointsAction.triggered.connect(self.plot_data_points)
+        self.plotPointsAction.triggered.connect(self.open_plot_window)
 
         self.resetViewAction = QAction(QIcon('icons/reset_view.png'), 'Reset View', self)
         self.resetViewAction.triggered.connect(self.reset_view)
@@ -227,6 +227,10 @@ class MainWindow(QMainWindow):
         self.toggleThemeAction.setToolTip('Toggle between dark and light themes')
         self.toggleThemeAction.setCheckable(True)
         self.toggleThemeAction.triggered.connect(self.toggle_theme)
+
+        self.resetAction = QAction(QIcon('icons/reset.png'), '&Reset Application', self)
+        self.resetAction.setToolTip('Reset the application to its initial state')
+        self.resetAction.triggered.connect(self.reset_application)
     def createMenus(self):
         """Creates the menus for the application."""
         menubar = self.menuBar()
@@ -236,6 +240,7 @@ class MainWindow(QMainWindow):
         exportMenu = fileMenu.addMenu('Export As')
         exportMenu.addAction(self.exportCsvAction)
         exportMenu.addAction(self.exportJsonAction)
+        fileMenu.addAction(self.resetAction)
 
         toolsMenu = menubar.addMenu('&Tools')
         toolsMenu.addAction(self.calibrationAction)
@@ -258,7 +263,6 @@ class MainWindow(QMainWindow):
         viewMenu = menubar.addMenu('&View')
         viewMenu.addAction(self.plotPointsAction)
         viewMenu.addAction(self.resetViewAction)
-
         viewMenu.addAction(self.magnifierAction)
         viewMenu.addAction(self.toggleThemeAction)
 
@@ -309,7 +313,8 @@ class MainWindow(QMainWindow):
         mainToolBar.addAction(self.denoiseAction)
         mainToolBar.addAction(self.perspectiveAction)
         mainToolBar.addAction(self.rotateAction)
-        mainToolBar.addAction(self.magnifierAction)  # Add magnifier tool to the toolbar
+        mainToolBar.addAction(self.resetAction)
+        mainToolBar.addAction(self.magnifierAction)
 
     def createDockWidget(self):
         """Creates a dock widget for additional tools."""
@@ -454,7 +459,9 @@ class MainWindow(QMainWindow):
         pts2 = np.float32([[0, 0], [width, 0], [0, height], [width, height]])
         self.image_processor.correct_perspective(pts1, pts2)
         self.update_image()
+        self.image_view.clear_perspective_points()  # Clear the perspective points after correction
         self.status_bar.showMessage("Perspective corrected.", 5000)
+
     def toggle_feature_detection_mode(self):
         """Toggles the advanced feature detection mode."""
         if not self.calibration.calibration_done or len(self.calibration.calibration_points) < 4:
@@ -509,10 +516,11 @@ class MainWindow(QMainWindow):
         self.setCursor(QCursor(Qt.CrossCursor if self.perspective_mode else Qt.ArrowCursor))
         self.update_perspective_info()
         self.image_view.selection_mode = not self.perspective_mode
-        if self.perspective_mode:
-            self.status_bar.showMessage("Perspective mode enabled.", 5000)
-        else:
+        if not self.perspective_mode:
+            self.image_view.clear_perspective_points()  # Clear the points if perspective mode is disabled
             self.status_bar.showMessage("Perspective mode disabled.", 5000)
+        else:
+            self.status_bar.showMessage("Perspective mode enabled.", 5000)
 
     def update_perspective_info(self):
         """Updates the informational label for perspective correction."""
@@ -718,33 +726,13 @@ class MainWindow(QMainWindow):
         self.update_image()
         self.status_bar.showMessage("Data point(s) deleted.", 5000)
 
-    def plot_data_points(self):
-        """Plots the data points using matplotlib."""
+
+
+    def open_plot_window(self):
         data_points = self.extraction.get_data_points()
-        if not data_points:
-            print("No data points to plot.")
-            self.status_bar.showMessage("No data points to plot.", 5000)
-            return
-
-        valid_data_points = [point for point in data_points if point.get_real_coordinates() is not None]
-        x_coords = [point.get_real_coordinates().x() for point in valid_data_points]
-        y_coords = [point.get_real_coordinates().y() for point in valid_data_points]
-
-        plt.scatter(x_coords, y_coords, c='blue', label='Data Points')
-
-        if self.interpolation_mode and self.interpolation.interpolated_points:
-            valid_interpolated_points = [point for point in self.interpolation.interpolated_points if
-                                         point.get_real_coordinates() is not None]
-            x_interp_coords = [point.get_real_coordinates().x() for point in valid_interpolated_points]
-            y_interp_coords = [point.get_real_coordinates().y() for point in valid_interpolated_points]
-            plt.scatter(x_interp_coords, y_interp_coords, c='red', label='Interpolated Points')
-
-        plt.xlabel('X Coordinates')
-        plt.ylabel('Y Coordinates')
-        plt.title('Data Points Plot')
-        plt.legend()
-        plt.show()
-        self.status_bar.showMessage("Data points plotted.", 5000)
+        interpolated_points = self.interpolation.interpolated_points if self.interpolation_mode else None
+        self.plot_window = PlotWindow(data_points, interpolated_points, self)
+        self.plot_window.show()
 
     def save_undo_state(self, action, item, point):
         """Saves the current state for undo functionality."""
@@ -782,3 +770,40 @@ class MainWindow(QMainWindow):
             self.extraction.data_points.remove(point)
             self.show_data_points()
             self.update_image()
+
+    def reset_application(self):
+        """Resets the application to its initial state."""
+        # Clear calibration points
+        self.calibration.clear_calibration_points()
+
+        # Clear data points
+        self.extraction.data_points = []
+
+
+        # Clear temporary points
+        self.extraction.clear_temp_points()
+        self.image_view.clear_detected_points()
+
+        # Clear interpolated points
+        self.interpolation.clear_interpolated_points()
+
+        # Clear the image
+        self.image_processor.image = None
+
+
+        # Reset UI elements
+        self.status_bar.clearMessage()
+        self.setCursor(QCursor(Qt.ArrowCursor))
+
+        # Disable actions that require an image
+        self.calibrationAction.setEnabled(False)
+        self.automaticCalibrationAction.setEnabled(False)
+        self.extractionAction.setEnabled(False)
+        self.histogramAction.setEnabled(False)
+        self.edgeAction.setEnabled(False)
+        self.denoiseAction.setEnabled(False)
+        self.perspectiveAction.setEnabled(False)
+        self.rotateAction.setEnabled(False)
+        self.detectedPointsAction.setEnabled(False)
+
+        self.status_bar.showMessage("Application reset to initial state.", 5000)

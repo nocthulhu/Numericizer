@@ -53,6 +53,7 @@ class Calibration:
         """Clears all calibration points."""
         self.main_window.image_view.clear_calibration_points()
         self.calibration_points = []
+        self.calibration_done = False
 
     def calculate_transformation_matrix(self):
         """Calculates the transformation matrix based on calibration points."""

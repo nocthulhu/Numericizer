@@ -36,7 +36,9 @@ class DataExtraction:
     def clear_temp_points(self):
         """Clears the temporary points found during automatic extraction."""
         self.temp_points = []
-
+    def clear_data_points(self):
+        """Clears the data points"""
+        self.data_points = []
     def automatic_extraction(self, image):
         """Automatically detects data points from the image for visualization."""
         gray = cv2.cvtColor(image, cv2.COLOR_BGR2GRAY)

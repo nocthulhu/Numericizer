@@ -193,6 +193,15 @@ class ImageView(QGraphicsView):
         self.perspective_points.append(point)
         self.update()
 
+    def clear_perspective_points(self):
+        """Clears all perspective points from the image."""
+        for point in self.perspective_points:
+            items = self.scene.items(QRectF(point.x() - 5, point.y() - 5, 10, 10))
+            for item in items:
+                if isinstance(item, QGraphicsEllipseItem):
+                    self.scene.removeItem(item)
+        self.perspective_points = []
+        self.update_scene()
     def draw_calibration_points(self, calibration_points):
         """Draws calibration points on the image."""
         for point_graphic in self.calibration_points_graphics:
@@ -373,7 +382,7 @@ class ImageView(QGraphicsView):
             if action == edit_action:
                 self.main_window.edit_data_point(item)
             elif action == delete_action:
-                self.main_window.delete_data_point(item)  # Call delete_data_point from main_window
+                self.main_window.delete_data_point(item)
 
     def delete_point(self, item):
         """Deletes the selected data point."""

@@ -10,12 +10,12 @@ class Calibration:
 
     def __init__(self, main_window):
         self.main_window = main_window
-        self.calibration_points = []  # List of Point objects
+        self.calibration_points = []
         self.transformation_matrix = None
         self.inverse_transformation_matrix = None
         self.calibration_done = False
         self.automatic_calibration_mode = False
-        self.calibration_cancelled = False  # Track if calibration is cancelled
+        self.calibration_cancelled = False
 
     def add_calibration_point(self, point: QPointF, automatic=False):
         """Adds a calibration point and triggers dialog for real coordinates input."""
@@ -33,7 +33,7 @@ class Calibration:
                 point_obj.set_real_coordinates(QPointF(real_x, real_y))
                 self.main_window.image_view.delete_highlight(point_obj)
                 self.main_window.image_view.draw_calibration_points(self.calibration_points)
-                if len(self.calibration_points) == 4:  # Calculate and refine transformation matrix after 4 points are selected
+                if len(self.calibration_points) == 4:  # Calculate, refine transformation matrix
                     self.calculate_transformation_matrix()
                     self.refine_calibration()
             elif result == 1000:  # Next point
@@ -85,7 +85,6 @@ class Calibration:
             [[p.get_real_coordinates().x(), p.get_real_coordinates().y()] for p in self.calibration_points],
             dtype=np.float32)
 
-        # Use cv2.findHomography with RANSAC to refine the transformation matrix
         self.transformation_matrix, _ = cv2.findHomography(image_points, real_coords, method=cv2.RANSAC, ransacReprojThreshold=5.0, maxIters=iterations, confidence=0.99)
         self.inverse_transformation_matrix = np.linalg.inv(self.transformation_matrix)
 

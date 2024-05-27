@@ -30,10 +30,10 @@ class ImageView(QGraphicsView):
         # Selection tool
         self.rubber_band = QRubberBand(QRubberBand.Rectangle, self)
         self.origin = QPointF()
-        self.selection_mode = True  # Default tool
-        self.selected_items = []  # To store selected items
+        self.selection_mode = True# Default
+        self.selected_items = []
         self.dragging = False
-        self.drag_start_position = None  # Initialize drag_start_position
+        self.drag_start_position = None
 
         # Magnifier tool
         self.magnifier = QGraphicsRectItem()
@@ -86,10 +86,10 @@ class ImageView(QGraphicsView):
                 if self.pixmap_item and self.pixmap_item.contains(scene_pos):
                     if self.main_window.calibration_mode:
                         self.main_window.calibration.add_calibration_point(scene_pos)
-                        self.update_scene()  # Update scene to show points
+                        self.update_scene()
                     elif self.main_window.extraction_mode:
                         self.main_window.extraction.add_data_point(scene_pos)
-                        self.update_scene()  # Update scene to show points
+                        self.update_scene()
                     elif self.main_window.perspective_mode:
                         self.add_perspective_point(scene_pos)
                         if len(self.perspective_points) == 4:
@@ -112,8 +112,8 @@ class ImageView(QGraphicsView):
             scene_pos = self.mapToScene(event.pos())
             item = self.scene.itemAt(scene_pos, self.transform())
             if isinstance(item, QGraphicsEllipseItem):
-                self.selected_items = [item]  # Store selected item(s)
-                self.drag_start_position = event.pos()  # Set drag start position
+                self.selected_items = [item]
+                self.drag_start_position = event.pos()
             else:
                 self.selected_items = []
 
@@ -130,7 +130,6 @@ class ImageView(QGraphicsView):
                 if point:
                     point.set_image_coordinates(new_pos)
             self.update_scene()
-        # Magnifier tool functionality
         if self.magnifier.isVisible():
             self.update_magnifier(event)
 
@@ -140,18 +139,18 @@ class ImageView(QGraphicsView):
             rect = self.rubber_band.geometry()
             selection_rect = self.mapToScene(rect).boundingRect()
             selected_items = self.scene.items(selection_rect)
-            self.clear_selection()  # Clear previous selection
+            self.clear_selection()
             for item in selected_items:
                 if isinstance(item, QGraphicsEllipseItem):
                     point = item.data(0)
-                    if isinstance(point, Point):  # Ensure we are working with Point objects
+                    if isinstance(point, Point):
                         self.highlight_point(point)
                         self.selected_items.append(item)
             self.update_scene()
         elif event.button() == Qt.RightButton:
             self.selected_items = []
             self.dragging = False
-            self.drag_start_position = None  # Reset drag start position
+            self.drag_start_position = None
 
     def update_magnifier(self, event):
         """Updates the position and content of the magnifier."""
@@ -179,7 +178,7 @@ class ImageView(QGraphicsView):
         """Clears the current selection."""
         for item in self.selected_items:
             point = item.data(0)
-            if isinstance(point, Point):  # Ensure we are working with Point objects
+            if isinstance(point, Point):
                 self.delete_highlight(point)
         self.selected_items = []
         self.update()
@@ -386,11 +385,11 @@ class ImageView(QGraphicsView):
 
     def delete_point(self, item):
         """Deletes the selected data point."""
-        point = item.data(0)  # Retrieve the point object
+        point = item.data(0)
         if point:
             self.scene.removeItem(item)
             self.main_window.extraction.data_points.remove(point)
-            self.main_window.image_view.delete_highlight(point)  # Ensure highlight is removed
+            self.main_window.image_view.delete_highlight(point)
             self.update_scene()
         self.update()
 

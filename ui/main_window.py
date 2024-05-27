@@ -1,6 +1,6 @@
 from PyQt5.QtWidgets import (QApplication, QMainWindow, QAction, QFileDialog, QListWidget,
                              QListWidgetItem, QInputDialog, QMessageBox, QToolTip, QVBoxLayout,
-                             QHBoxLayout, QGridLayout, QWidget, QDockWidget, QStatusBar, QLabel, QPushButton)
+                             QHBoxLayout, QGridLayout, QWidget, QDockWidget, QStatusBar, QLabel, QPushButton,QGraphicsEllipseItem)
 from PyQt5.QtGui import QCursor, QFont, QPen, QIcon
 from PyQt5.QtCore import Qt, QPointF
 from ui.image_view import ImageView
@@ -286,7 +286,7 @@ class MainWindow(QMainWindow):
 
             self.image_view.clear_selection()
 
-            # Enable magnifier
+
             self.image_view.magnifier.setVisible(True)
             self.status_bar.showMessage("Magnifier tool activated. Use middle mouse button to magnify.", 5000)
             self.image_view.setCursor(Qt.CrossCursor)
@@ -668,6 +668,7 @@ class MainWindow(QMainWindow):
         else:
             print("Load an image first.")
             self.status_bar.showMessage("Load an image first.", 5000)
+
     def show_data_points(self):
         """Displays the list of data points."""
         self.data_points_list.clear()
@@ -675,34 +676,64 @@ class MainWindow(QMainWindow):
         interpolated_points = self.interpolation.interpolated_points if self.interpolation_mode else []
 
         for i, point in enumerate(data_points):
-            item = QListWidgetItem(f"Data Point {i + 1}: {point.get_real_coordinates()}")
+            real_coords = point.get_real_coordinates()
+            if real_coords is not None:
+                coord_str = f"({real_coords.x():.2f}, {real_coords.y():.2f})"
+            else:
+                coord_str = "(None)"
+            item = QListWidgetItem(f"Data Point {i + 1}: {coord_str}")
+            item.setData(Qt.UserRole, point)  # Store the Point instance
             self.data_points_list.addItem(item)
 
         for i, point in enumerate(interpolated_points):
-            item = QListWidgetItem(f"Interpolated Point {i + 1}: {point.get_real_coordinates()}")
+            real_coords = point.get_real_coordinates()
+            if real_coords is not None:
+                coord_str = f"({real_coords.x():.2f}, {real_coords.y():.2f})"
+            else:
+                coord_str = "(None)"
+            item = QListWidgetItem(f"Interpolated Point {i + 1}: {coord_str}")
+            item.setData(Qt.UserRole, point)  # Store the Point instance
             self.data_points_list.addItem(item)
     def edit_data_point(self, item):
         """Edits the selected data point."""
-        point = item.data(0)  # Retrieve the point object from the QGraphicsEllipseItem
-        if point:
-            # Get the real coordinates for editing
+
+        if isinstance(item, QGraphicsEllipseItem):
+            point = item.data(0)  #
             real_coords = point.get_real_coordinates()
             x, ok_x = QInputDialog.getDouble(self, "Edit Point", "X Coordinate:", real_coords.x(), -10000, 10000, 2)
             y, ok_y = QInputDialog.getDouble(self, "Edit Point", "Y Coordinate:", real_coords.y(), -10000, 10000, 2)
             if ok_x and ok_y:
-                # Update the real coordinates
+                # Update real coordinates
                 new_real_coords = QPointF(x, y)
-                # Convert the new real coordinates back to image coordinates
+                # Convert new real coordinates to image coordinates
                 new_image_coords = self.calibration.inverse_transform_point(x, y)
                 point.set_image_coordinates(new_image_coords)
                 point.set_real_coordinates(new_real_coords)
                 self.image_view.update_scene()
                 self.show_data_points()
-                self.save_undo_state("edit_data_point", item, point)  # Save state for undo
+                self.save_undo_state("edit_data_point", item, point)
                 self.status_bar.showMessage("Data point edited.", 5000)
             else:
                 QMessageBox.warning(self, "Invalid Selection", "Cannot edit an interpolated point.")
+        else:
+            point = item.data(Qt.UserRole)
+            real_coords = point.get_real_coordinates()
+            x, ok_x = QInputDialog.getDouble(self, "Edit Point", "X Coordinate:", real_coords.x(), -10000, 10000, 2)
+            y, ok_y = QInputDialog.getDouble(self, "Edit Point", "Y Coordinate:", real_coords.y(), -10000, 10000, 2)
 
+            if ok_x and ok_y:
+                # Update real coordinates
+                new_real_coords = QPointF(x, y)
+                # Convert new real coordinates to image coordinates
+                new_image_coords = self.calibration.inverse_transform_point(x, y)
+                point.set_image_coordinates(new_image_coords)
+                point.set_real_coordinates(new_real_coords)
+                self.image_view.update_scene()
+                self.show_data_points()
+                self.save_undo_state("edit_data_point", item, point)
+                self.status_bar.showMessage("Data point edited.", 5000)
+            else:
+                QMessageBox.warning(self, "Invalid Selection", "Cannot edit an interpolated point.")
     def delete_data_point(self, item=None):
         """Deletes a selected data point or multiple selected data points."""
         if item:
@@ -737,7 +768,7 @@ class MainWindow(QMainWindow):
     def save_undo_state(self, action, item, point):
         """Saves the current state for undo functionality."""
         self.undo_stack.append((action, item, point))
-        self.redo_stack.clear()  # Clear the redo stack on new action
+        self.redo_stack.clear()
         self.status_bar.showMessage("Undo state saved.", 5000)
     def reset_view(self):
         """Resets the view by centering and resetting zoom."""
@@ -780,22 +811,22 @@ class MainWindow(QMainWindow):
         self.extraction.data_points = []
 
 
-        # Clear temporary points
+        #temporary points
         self.extraction.clear_temp_points()
         self.image_view.clear_detected_points()
 
-        # Clear interpolated points
+        #interpolate points
         self.interpolation.clear_interpolated_points()
 
-        # Clear the image
+        #image
         self.image_processor.image = None
 
 
-        # Reset UI elements
+        # Reset UI
         self.status_bar.clearMessage()
         self.setCursor(QCursor(Qt.ArrowCursor))
 
-        # Disable actions that require an image
+        # Disable actions
         self.calibrationAction.setEnabled(False)
         self.automaticCalibrationAction.setEnabled(False)
         self.extractionAction.setEnabled(False)

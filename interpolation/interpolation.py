@@ -33,7 +33,7 @@ class Interpolation:
         x = [point.get_real_coordinates().x() for point in valid_points]
         y = [point.get_real_coordinates().y() for point in valid_points]
 
-        # Calculate the step size based on the distances between x coordinates
+
         distances = np.diff(x)
         min_distance = np.min(distances) if len(distances) > 0 else 1
         num_points = int((max(x) - min(x)) / min_distance * 40)  # Adjust the factor as needed

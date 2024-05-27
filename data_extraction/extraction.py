@@ -5,8 +5,8 @@ import numpy as np
 
 class DataExtraction:
     def __init__(self, calibration, main_window):
-        self.data_points = []  # List of Point objects
-        self.temp_points = []  # Temporary list of points found during automatic extraction
+        self.data_points = []
+        self.temp_points = []  # points automatic extraction
         self.calibration = calibration
         self.main_window = main_window
 

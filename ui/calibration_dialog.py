@@ -60,11 +60,11 @@ class CalibrationDialog(QDialog):
         """Rejects the dialog and cancels the calibration."""
         self.real_coordinates = None
         if self.automatic_calibration:
-            self.done(-1)  # Custom code to signal cancel in automatic calibration
+            self.done(-1)  # signal cancel in automatic calibration
         else:
             super().reject()
 
     def next_point(self):
         """Handles the next point selection in automatic calibration mode."""
         self.real_coordinates = None
-        self.done(1000)  # Custom code to signal next point
+        self.done(1000)  # signal next point
